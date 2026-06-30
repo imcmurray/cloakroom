@@ -74,9 +74,9 @@ See [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) for the full analysis.
 
 ---
 
-## Monetization & open-source strategy
+## Open source
 
-Open-core. The engine + SPA are MIT and self-hostable (trust requires auditability for a privacy tool). Revenue from a **Pro/Team** tier: encrypted cross-device sync of *rule-sets only* (never mappings), shared org dictionaries, the browser extension, SSO, and a supported self-host distribution. Lawyers/enterprises pay for support, an audit trail, and a signed reproducible build — not for the core function.
+MIT-licensed and fully self-hostable. For a privacy tool, auditability *is* the trust story — the engine and SPA are open so anyone can verify nothing leaves the browser.
 
 ---
 
