@@ -1,0 +1,15 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# local env / editor
+.env
+.env.*
+.DS_Store
+*.log
+
+# the whole point of this tool — never commit a bridge file or its secrets
+*.cloak
