@@ -20,12 +20,16 @@
 
 * { box-sizing: border-box; }
 
-html, body, #root { height: 100%; }
+html { background: var(--vault); }
+#root { min-height: 100%; }
 body {
   margin: 0;
-  background:
-    radial-gradient(1200px 600px at 80% -10%, #1d2433 0%, transparent 60%),
-    var(--vault);
+  min-height: 100vh;
+  background-color: var(--vault);
+  /* Single fixed glow — gradients are images, so without no-repeat they tile down the page. */
+  background-image: radial-gradient(1200px 600px at 80% -10%, #1d2433 0%, transparent 60%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   color: var(--paper);
   font-family: var(--display);
   -webkit-font-smoothing: antialiased;
@@ -192,6 +196,20 @@ details.help p.ex { font-family: var(--mono); background: var(--vault-3); border
 .audit .to { color: var(--muted); }
 .audit code { color: var(--restored); background: var(--vault-3); padding: 1px 6px; border-radius: 4px; }
 .audit .count { color: var(--muted); }
+
+.site-footer {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px;
+  margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line);
+  color: var(--muted); font-size: 12.5px;
+}
+.site-footer .gh {
+  display: inline-flex; align-items: center; gap: 7px;
+  color: var(--paper); text-decoration: none; font-weight: 600;
+}
+.site-footer .gh svg { color: var(--muted); transition: color 0.15s ease; }
+.site-footer .gh:hover { color: var(--brass); }
+.site-footer .gh:hover svg { color: var(--brass); }
+.site-footer .dot { color: var(--brass-dim); }
 
 .flash {
   position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
