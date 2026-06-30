@@ -234,7 +234,7 @@ export function App() {
                   </Pane>
                   <div className="arrow" aria-hidden>→</div>
                   <Pane label="Sanitized" sub="safe to paste into any LLM"
-                    action={result?.sanitized && <button className="ghost" onClick={() => copy(result.sanitized, 'sanitized')}>Copy</button>}>
+                    action={result?.sanitized && <button className="ghost" onClick={() => { copy(result.sanitized, 'sanitized'); setInboundOpen(true); }}>Copy</button>}>
                     <pre className="readout">{result?.sanitized || <span className="placeholder">Run sanitize to see decoyed output…</span>}</pre>
                   </Pane>
                 </div>
