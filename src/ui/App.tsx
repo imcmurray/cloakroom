@@ -55,6 +55,7 @@ export function App() {
   const [imported, setImported] = useState(false);
   const [outboundOpen, setOutboundOpen] = useState(true);
   const [inboundOpen, setInboundOpen] = useState(false);
+  const [egress, setEgress] = useState<'idle' | 'testing' | 'blocked' | 'allowed'>('idle');
   const [flash, setFlash] = useState<string | null>(null);
 
   const mapping = result?.mapping ?? [];
@@ -87,6 +88,18 @@ export function App() {
     setSegments(segments);
     setGaps(gaps);
     note(gaps.length ? `Restored, but ${gaps.length} placeholder(s) were missing from the reply` : 'Restored');
+  }
+
+  // Live proof for visitors: try to reach the network. With the production CSP
+  // (connect-src 'none') the browser blocks it and fetch throws → "blocked".
+  async function runEgressTest() {
+    setEgress('testing');
+    try {
+      await fetch('https://example.com/cloakroom-egress-probe', { mode: 'no-cors', cache: 'no-store' });
+      setEgress('allowed');
+    } catch {
+      setEgress('blocked');
+    }
   }
 
   async function copy(text: string, what: string) {
@@ -331,6 +344,29 @@ export function App() {
         <span>Open source (MIT)</span>
         <span className="dot" aria-hidden>·</span>
         <span>Runs entirely in your browser — nothing you paste is ever sent anywhere.</span>
+
+        <details className="verify">
+          <summary>How do I know nothing is sent? <span className="arrow-link">verify it →</span></summary>
+          <div className="verify-body">
+            <p>
+              This page declares <code>connect-src 'none'</code> in its Content-Security-Policy (see it
+              yourself: View Source, or DevTools → Elements → the <code>&lt;meta&gt;</code> in <code>&lt;head&gt;</code>).
+              The browser blocks every outbound request — prove it live:
+            </p>
+            <div className="verify-actions">
+              <button className="ghost" onClick={runEgressTest} disabled={egress === 'testing'}>
+                {egress === 'testing' ? 'Testing…' : 'Run egress test'}
+              </button>
+              {egress === 'blocked' && <span className="ok">✓ Blocked by your browser — this page cannot reach the network.</span>}
+              {egress === 'allowed' && <span className="warn">⚠ A request went through — likely the dev build (CSP relaxed for HMR), not the deployed site.</span>}
+            </div>
+            <p className="hint">
+              It also works fully offline (install it, then turn off Wi-Fi), and every deployed build is{' '}
+              <a href="https://github.com/imcmurray/cloakroom/attestations" target="_blank" rel="noopener noreferrer">provenance-signed</a>{' '}
+              — verify with <code>gh attestation verify</code>.
+            </p>
+          </div>
+        </details>
       </footer>
 
       {flash && <div className="flash" role="status">{flash}</div>}

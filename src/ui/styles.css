@@ -211,6 +211,20 @@ details.help p.ex { font-family: var(--mono); background: var(--vault-3); border
 .site-footer .gh:hover svg { color: var(--brass); }
 .site-footer .dot { color: var(--brass-dim); }
 
+.site-footer .verify { flex-basis: 100%; max-width: 640px; margin: 6px auto 0; text-align: left; }
+.site-footer .verify summary { cursor: pointer; text-align: center; list-style: none; color: var(--muted); }
+.site-footer .verify summary::-webkit-details-marker { display: none; }
+.site-footer .verify .arrow-link { color: var(--brass); font-weight: 600; }
+.site-footer .verify:hover summary .arrow-link { text-decoration: underline; }
+.verify-body { margin-top: 12px; padding: 14px; background: var(--vault-2); border: 1px solid var(--line); border-radius: 12px; }
+.verify-body p { margin: 0 0 10px; line-height: 1.55; }
+.verify-body p.hint { margin-bottom: 0; color: var(--muted); }
+.verify-body code { background: var(--vault-3); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); font-size: 11.5px; }
+.verify-body a { color: var(--brass); }
+.verify-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.verify-actions .ok { color: var(--restored); font-weight: 600; }
+.verify-actions .warn { color: var(--alert); font-weight: 600; }
+
 .flash {
   position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
   background: var(--ink); color: var(--paper); border: 1px solid var(--brass-dim);
