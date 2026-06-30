@@ -1,9 +1,15 @@
 # Cloakroom
 
+[![CI](https://github.com/imcmurray/cloakroom/actions/workflows/ci.yml/badge.svg)](https://github.com/imcmurray/cloakroom/actions/workflows/ci.yml)
+[![Deploy](https://github.com/imcmurray/cloakroom/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/imcmurray/cloakroom/actions/workflows/deploy-pages.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+
+**▶ Live demo: https://imcmurray.github.io/cloakroom/** — runs entirely in your browser; nothing you paste is sent anywhere.
+
 > **Check your secrets at the door. Get them back on the way out.**
 > A zero-knowledge, client-side bridge that strips PII/secrets out of text before you paste it into any LLM — then restores your real data into the AI's reply.
 
-Working name was *SanitizeBridge*; **Cloakroom** is recommended — the coat-check metaphor maps exactly onto the round trip (sanitize on the way in, restore on the way out) and is short, brandable, and non-scary.
+The name maps onto the round trip: like a coat check, you hand your secrets over on the way in and collect them on the way out — short, brandable, and non-scary.
 
 **Elevator pitch:** Developers, sysadmins, lawyers, and support staff constantly paste logs, tickets, and documents into ChatGPT/Claude/Grok — leaking IPs, API keys, client names, SSNs, and internal paths. Cloakroom runs entirely in your browser: it detects sensitive values, swaps them for realistic decoys drawn from *reserved* ranges (RFC 5737 IPs, `example.com`, area-900 SSNs, Luhn-valid test cards), keeps a private mapping that never touches a server, and reverses the swap on the AI's response. The LLM gets coherent, useful text; your real data never leaves the machine.
 
