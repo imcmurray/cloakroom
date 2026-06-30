@@ -11,6 +11,8 @@
 
 The name maps onto the round trip: like a coat check, you hand your secrets over on the way in and collect them on the way out — short, brandable, and non-scary.
 
+![Cloakroom round trip — real data is swapped for reserved-range decoys on the way out, then restored (with color-coded highlights) on the way back](./docs/screenshot.png)
+
 **Elevator pitch:** Developers, sysadmins, lawyers, and support staff constantly paste logs, tickets, and documents into ChatGPT/Claude/Grok — leaking IPs, API keys, client names, SSNs, and internal paths. Cloakroom runs entirely in your browser: it detects sensitive values, swaps them for realistic decoys drawn from *reserved* ranges (RFC 5737 IPs, `example.com`, area-900 SSNs, Luhn-valid test cards), keeps a private mapping that never touches a server, and reverses the swap on the AI's response. The LLM gets coherent, useful text; your real data never leaves the machine.
 
 ---
@@ -50,6 +52,22 @@ flowchart TD
 **Server responsibilities (optional):** serve the static SPA; that's it. A Worker may store *anonymous aggregate counts* for telemetry, gated behind explicit opt-in. The threat model assumes the server is hostile.
 
 See [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) for the full analysis.
+
+---
+
+## Verify "nothing is sent" — don't take our word for it
+
+Privacy claims should be checkable, not trusted. In rough order of how convincing each is:
+
+1. **Pull the plug.** Go offline (or DevTools → Network → *Offline*) and use it. Sanitize, encrypt a bridge file, restore — all work with zero connectivity. Software that works fully offline cannot be exfiltrating your data.
+2. **Watch the network.** Open DevTools → Network and run a full sanitize → restore. After the initial page/asset load there are **no** requests — no fetch, XHR, WebSocket, or beacon.
+3. **The browser enforces it.** The production build ships a Content-Security-Policy of `connect-src 'none'`, so the browser itself blocks every outbound request. Even injected or compromised code physically cannot phone home.
+4. **Read the source.** `grep -rn "fetch\|XMLHttpRequest\|WebSocket\|sendBeacon" src/` returns nothing. Crypto is Web Crypto (local); detection runs in a Web Worker. It's MIT — build it yourself.
+5. **Prove the served bundle is the source (build provenance).** Every deployed file carries a signed [SLSA build-provenance attestation](https://github.com/imcmurray/cloakroom/attestations) tying it to the exact commit and CI workflow. Download an asset and verify it was built from this repo, not tampered with in transit or at the host:
+   ```bash
+   gh attestation verify <downloaded-asset.js> --repo imcmurray/cloakroom
+   ```
+6. **Maximum assurance.** A hosted page still asks you to trust the host to serve the real JS on first load — physics, not a bug, for any web app. Self-host the static build, run it offline, or use a pinned browser extension to remove that last sliver of trust.
 
 ---
 

@@ -9,6 +9,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  attestations: write # sign build-provenance for the deployed bundle
 
 # Only one concurrent deploy; let an in-progress run finish.
 concurrency:
@@ -26,6 +27,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # Signed SLSA build provenance: proves this exact bundle was built by THIS
+      # workflow from THIS commit. Anyone can check with:
+      #   gh attestation verify <asset> --repo imcmurray/cloakroom
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'dist/**/*'
       - uses: actions/configure-pages@v5
         with:
           enablement: true
