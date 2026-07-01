@@ -3,6 +3,7 @@ node_modules/
 
 # build output
 dist/
+dist-cli/
 *.tsbuildinfo
 
 # local env / editor
@@ -13,3 +14,4 @@ dist/
 
 # the whole point of this tool — never commit a bridge file or its secrets
 *.cloak
+.cloak/
