@@ -131,6 +131,30 @@ describe('CloakroomEngine', () => {
     expect(sum % 10).toBe(0);
   });
 
+  it('does not swallow a trailing space/word after a spaced card number', () => {
+    const r = engine.sanitize('card 4111 1111 1111 1111 declined at checkout');
+    const card = r.mapping.find((m) => m.type === 'CREDIT_CARD')!;
+    // the match must be exactly the card digits/spacing — no trailing separator
+    expect(card.original).toBe('4111 1111 1111 1111');
+    // so the decoy stays a separate word and never mashes into "declined"
+    expect(r.sanitized).toContain(' declined at checkout');
+    expect(r.sanitized).not.toMatch(/\ddeclined/i);
+    expect(engine.desanitize(r.sanitized, r.mapping)).toBe('card 4111 1111 1111 1111 declined at checkout');
+  });
+
+  it('priorMapping keeps a repeated value consistent across separate calls', () => {
+    const first = engine.sanitize('login from 10.1.2.3 by bob@corp.com');
+    const ipDecoy = first.mapping.find((m) => m.original === '10.1.2.3')!.placeholder;
+    // Second, independent call that shares the IP — seed it with the first mapping.
+    const second = engine.sanitize('retry from 10.1.2.3 timed out', { priorMapping: first.mapping });
+    // same real IP → same decoy as before
+    expect(second.sanitized).toContain(ipDecoy);
+    // and the merged mapping still has exactly one entry for that IP
+    expect(second.mapping.filter((m) => m.original === '10.1.2.3')).toHaveLength(1);
+    // the carried-through email (not in the 2nd text) is retained for restore
+    expect(second.mapping.some((m) => m.original === 'bob@corp.com')).toBe(true);
+  });
+
   it('encrypts and decrypts a bridge file with the right passphrase', async () => {
     const r = engine.sanitize(SAMPLE);
     const blob = await encryptBridge(r.mapping, 'correct horse battery staple');

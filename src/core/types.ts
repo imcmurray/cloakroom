@@ -76,6 +76,15 @@ export interface SanitizeOptions {
   minConfidence?: number;
   /** Deterministic fakes across runs. Default derives from content. */
   seed?: number;
+  /**
+   * Existing mapping to build on. Any original already present keeps its exact
+   * placeholder (so the same real value maps to the same decoy across calls),
+   * and all prior placeholders are reserved so new decoys never collide with
+   * them. Entries not seen in this text are carried through unchanged. This is
+   * what makes an accumulating session bridge (e.g. the CLI `--merge` flag or
+   * the Claude Code hooks) consistent and reversible across many inputs.
+   */
+  priorMapping?: MappingEntry[];
 }
 
 export interface SanitizeResult {

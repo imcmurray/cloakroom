@@ -77,7 +77,9 @@ const DETECTORS: DetectorDef[] = [
   },
   { type: 'MAC', name: 'mac', confidence: 0.88, re: /\b(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b/g },
   { type: 'SSN', name: 'ssn', confidence: 0.8, re: /\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/g },
-  { type: 'CREDIT_CARD', name: 'credit-card', confidence: 0.92, re: /\b(?:\d[ -]?){13,19}\b/g, validate: luhnValid },
+  // Anchored to start AND end on a digit so a trailing space/hyphen is never
+  // swallowed into the match (which would mash the decoy into the next word).
+  { type: 'CREDIT_CARD', name: 'credit-card', confidence: 0.92, re: /\b\d(?:[ -]?\d){12,18}\b/g, validate: luhnValid },
   { type: 'PHONE', name: 'phone', confidence: 0.6, re: /(?:\+?\d{1,3}[ .-]?)?\(?\d{3}\)?[ .-]?\d{3}[ .-]?\d{4}\b/g },
   { type: 'URL', name: 'url', confidence: 0.7, re: /\bhttps?:\/\/[^\s<>"'`]+/g },
   // Bare websites / hostnames, e.g. www.foo.com, example-corp.com, ecf.utd.uscourts.gov
