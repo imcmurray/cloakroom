@@ -18,3 +18,11 @@ jobs:
       # `build` runs `tsc --noEmit && vite build`, so this also typechecks.
       - run: npm run build
       - run: npm test
+      # Verify the CLI/hook binary bundles and actually runs.
+      - run: npm run build:cli
+      - name: CLI smoke test
+        run: |
+          node dist-cli/cloak.mjs --version
+          printf 'connect 10.0.0.1 as a@b.com\n' > /tmp/smoke.txt
+          # `scan` must exit 3 when it finds secrets (the CI/pre-commit contract).
+          node dist-cli/cloak.mjs scan /tmp/smoke.txt && { echo "FAIL: scan should have found secrets"; exit 1; } || echo "OK: scan flagged secrets (exit 3)"

@@ -49,11 +49,11 @@ EXAMPLES
 async function main(argv: string[]): Promise<number> {
   const args = parseArgs(argv);
 
-  if (args.flags['version'] || args.command === 'version') {
+  if (args.flags['version'] || args.command === 'version' || args.command === '--version') {
     process.stdout.write(VERSION + '\n');
     return 0;
   }
-  if (args.flags['help'] || args.command === 'help') {
+  if (args.flags['help'] || args.command === 'help' || args.command === '--help') {
     process.stdout.write(HELP);
     return 0;
   }

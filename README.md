@@ -117,9 +117,11 @@ cloakroom/
 ## Run it
 
 ```bash
-npm install
-npm test        # round-trip, consistency, whitelist, Luhn, crypto, CLI arg parsing
+npm install     # installs deps and builds the CLI (dist-cli/cloak.mjs) via `prepare`
+npm test        # round-trip, consistency, whitelist, Luhn, crypto, CLI args, hooks
 ```
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the dev loop and project conventions.
 
 ## Command line (`cloak`)
 

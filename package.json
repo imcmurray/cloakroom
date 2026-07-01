@@ -11,6 +11,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "build:cli": "node scripts/build-cli.mjs",
+    "prepare": "node scripts/build-cli.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
