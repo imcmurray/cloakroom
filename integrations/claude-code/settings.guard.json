@@ -1,12 +1,20 @@
 {
-  "//": "Cloakroom GUARD profile for Claude Code. Robust, no decoy-reasoning.",
-  "//1": "Blocks reading a file full of PII/secrets into the model's context.",
-  "//2": "Copy the `hooks` block into .claude/settings.json (project) or ~/.claude/settings.json (global).",
-  "//3": "Requires `cloak` on PATH (npm link) or replace with an absolute path to dist-cli/cloak.mjs.",
+  "//": "Cloakroom GUARD profile for Claude Code. Robust, no decoy-reasoning, no env needed.",
+  "//1": "PreToolUse: blocks reading a PII/secret-laden file into the model's context.",
+  "//2": "PostToolUse: withholds Bash/Grep output that carries secrets (closes the `cat secrets.txt` bypass).",
+  "//3": "Already-sanitized text (Cloakroom's reserved-range decoys) does NOT trip the guard.",
+  "//4": "Copy the `hooks` block into .claude/settings.json (project) or ~/.claude/settings.json (global).",
+  "//5": "Requires `cloak` on PATH (npm link) or replace with an absolute path to dist-cli/cloak.mjs.",
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Read",
+        "hooks": [{ "type": "command", "command": "cloak hook guard" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Grep",
         "hooks": [{ "type": "command", "command": "cloak hook guard" }]
       }
     ]

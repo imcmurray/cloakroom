@@ -112,4 +112,65 @@ describe('hook guard (PreToolUse)', () => {
     await writeFile(f, 'nothing sensitive here', 'utf8');
     expect(await hookGuard({ tool_name: 'Read', tool_input: { file_path: f } })).toBeNull();
   });
+
+  it('does NOT trip on a file of Cloakroom decoys (already-sanitized content)', async () => {
+    const f = join(dir, 'sanitized.txt');
+    await writeFile(f, 'peer 203.0.113.9 mail alex.chen@example.net ssn 923-59-5676', 'utf8');
+    expect(await hookGuard({ tool_name: 'Read', tool_input: { file_path: f } })).toBeNull();
+  });
+});
+
+describe('hook guard (PostToolUse output — the shell bypass)', () => {
+  it('withholds Bash output that carries real secrets', async () => {
+    const resp = await hookGuard({
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Bash',
+      tool_response: { stdout: SECRET, stderr: '' },
+    });
+    const updated = (resp as any).hookSpecificOutput.updatedToolOutput;
+    expect(updated.stdout).not.toContain('10.9.9.9');
+    expect(updated.stdout).toContain('cloak guard');
+    expect(updated.stderr).toBe(''); // empty fields untouched
+  });
+
+  it('passes clean output through untouched (no-op)', async () => {
+    const resp = await hookGuard({
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Bash',
+      tool_response: { stdout: 'all tests passed', stderr: '' },
+    });
+    expect(resp).toBeNull();
+  });
+
+  it('passes decoy-bearing output through — sanitized text must not re-trip the guard', async () => {
+    const resp = await hookGuard({
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Bash',
+      tool_response: { stdout: 'login from 198.51.100.7 by casey.rivera@example.net', stderr: '' },
+    });
+    expect(resp).toBeNull();
+  });
+});
+
+describe('session key cache', () => {
+  it('creates a 0600 keyfile on first use and still round-trips on later calls', async () => {
+    const { stat } = await import('node:fs/promises');
+    await hookSanitize({ tool_name: 'Bash', tool_response: { stdout: SECRET, stderr: '' } });
+    const keyPath = process.env.CLOAK_SESSION_BRIDGE + '.key';
+    const st = await stat(keyPath);
+    expect(st.mode & 0o777).toBe(0o600);
+    // Second call must reuse the cached key and keep decoys consistent.
+    const again = await hookSanitize({ tool_name: 'Bash', tool_response: { stdout: `retry ${SECRET}`, stderr: '' } });
+    const out = (again as any).hookSpecificOutput.updatedToolOutput.stdout as string;
+    expect(out).not.toContain('10.9.9.9');
+  });
+
+  it('recovers from a corrupt keyfile by re-deriving', async () => {
+    await hookSanitize({ tool_name: 'Bash', tool_response: { stdout: SECRET, stderr: '' } });
+    await writeFile(process.env.CLOAK_SESSION_BRIDGE + '.key', 'garbage', 'utf8');
+    const resp = await hookSanitize({ tool_name: 'Bash', tool_response: { stdout: SECRET, stderr: '' } });
+    const out = (resp as any).hookSpecificOutput.updatedToolOutput.stdout as string;
+    expect(out).not.toContain('10.9.9.9');
+    expect(out).not.toContain('withheld'); // recovered, not failed-closed
+  });
 });

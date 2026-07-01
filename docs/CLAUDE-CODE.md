@@ -53,10 +53,15 @@ It reasons over nothing and can't corrupt anything — it either allows the read
 blocks it with an explanation. This is the high-value, low-risk piece, and it doubles
 as a way to keep court PII / client data out of transcripts.
 
-One honest limitation: the guard matches the `Read` tool, so a shell read (`cat
-secrets.txt` via Bash) bypasses it. Covering shell output is exactly what the
-transparent profile's `PostToolUse` sanitizer is for — the guard is a tripwire, not a
-perimeter.
+The guard covers both entry points: a `PreToolUse` deny on `Read` (blocks the file
+before its content is even produced), and a `PostToolUse` withhold on `Bash`/`Grep`
+output — so a shell read (`cat secrets.txt`) can't sneak the same content past it.
+When output is withheld, the model gets a short notice saying what was found and how
+to proceed (sanitize, or ask the user). Already-sanitized text is recognized by its
+reserved-range decoys (RFC 5737 IPs, `example.*` addresses, area-9xx SSNs) and does
+NOT re-trip the guard, so `cloak`'s own output flows through normally. Neither
+direction needs the session env — the guard never transforms, so it has no mapping to
+keep.
 
 ### 3. Transparent auto-cloak (the magic — buildable, with sharp edges)
 
@@ -82,6 +87,14 @@ Two things to know before turning this on:
   launches Claude Code. The `cloak hook sanitize` handler accumulates into that bridge
   with `--merge` semantics so a value seen in one read maps to the same decoy in the
   next, and `restore` reverses the whole session consistently.
+- Performance: the passphrase→key derivation is deliberately expensive (PBKDF2 600k),
+  and hooks run as a fresh process per tool call — so the first call derives once and
+  caches the raw derived key in `<bridge>.key` (mode 0600, git-ignored). Warm calls
+  cost ~50ms instead of ~1.5s. Plainly stated trade-off: the keyfile decrypts the
+  session bridge without the passphrase — near-zero marginal risk here since the same
+  user already holds `$CLOAK_PASS` in the environment, but delete `.cloak/` when the
+  session ends. Interactive CLI commands never create keyfiles; bridges you export and
+  share stay passphrase-only.
 - The model is now reasoning over decoys. That's perfect for logs, config dumps, and
   diagnostics, and risky for editing **source** files — if Claude rewrites a decoy, the
   restore can't re-anchor it (the engine's `reverseGaps` flags this, but the edit may

@@ -20,6 +20,17 @@ versions may include breaking changes.
 - CI now builds the CLI and runs a smoke test; `npm install` builds the CLI via a
   `prepare` script.
 
+### Changed
+- **Hook latency ~24× lower**: hooks now derive the bridge key once per session and
+  cache the raw derived key in `<bridge>.key` (0600, git-ignored) instead of paying
+  PBKDF2-600k twice on every tool call (~1.5s → ~50ms warm). Bridges stay
+  passphrase-compatible; interactive CLI commands never create keyfiles.
+- **Guard covers shell output**: `cloak hook guard` now also handles PostToolUse —
+  Bash/Grep output carrying secrets is withheld with a guidance notice, closing the
+  `cat secrets.txt` bypass of the Read guard. Cloakroom's own reserved-range decoys
+  are recognized (`isLikelyDecoy`) so sanitized text doesn't re-trip it.
+- CI runs on Node 24; `engines.node >= 20` declared.
+
 ### Fixed
 - **Hook contract**: `cloak hook sanitize` now reads the PostToolUse payload from
   `tool_response` (the field Claude Code actually sends — verified against the binary;

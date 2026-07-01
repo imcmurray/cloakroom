@@ -77,6 +77,33 @@ function luhnDigit(digits: string): string {
   return String((10 - (sum % 10)) % 10);
 }
 
+/**
+ * Is this detected value one of OUR OWN reserved-range decoys? Used by scanners
+ * (e.g. the Claude Code output guard) so already-sanitized text isn't flagged
+ * as leaking secrets. Only types whose decoys are structurally recognizable are
+ * covered — reserved doc ranges that real-world data can't legitimately use.
+ * Conservative by design: a `false` here just means "treat as sensitive".
+ */
+export function isLikelyDecoy(type: EntityType, value: string): boolean {
+  switch (type) {
+    case 'IPV4':
+      return /^(?:192\.0\.2|198\.51\.100|203\.0\.113)\.\d{1,3}$/.test(value); // RFC 5737
+    case 'IPV6':
+      return /^2001:db8:/i.test(value); // RFC 3849
+    case 'EMAIL':
+      return /@(?:[a-z0-9-]+\.)*example\.(?:com|org|net)$|@[a-z0-9-]+\.test$/i.test(value); // RFC 2606
+    case 'HOSTNAME':
+    case 'URL':
+      return /(?:^|\/\/|\.)example\.(?:com|org|net)(?:[/:]|$)/i.test(value) || /\.test$/i.test(value);
+    case 'SSN':
+      return /^9\d{2}-\d{2}-\d{4}$/.test(value); // area 900-999 never issued
+    case 'PHONE':
+      return /555-?01\d{2}$/.test(value); // 555-0100..0199 reserved for fiction
+    default:
+      return false; // mimic-style decoys (keys, hashes, cards) are indistinguishable
+  }
+}
+
 /** Produce a realistic, reserved-range fake for a given match. */
 export function generateRealistic(type: EntityType, original: string, seed = 0): string {
   const rng = rngFor(type, original, seed);

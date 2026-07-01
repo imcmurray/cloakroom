@@ -5,8 +5,10 @@ Full explanation and trade-offs: [`../../docs/CLAUDE-CODE.md`](../../docs/CLAUDE
 
 ## What's here
 
-- `settings.guard.json` — **guard profile** (recommended). A `PreToolUse` hook that
-  blocks reading a secret-laden file into context. Robust; no decoy-reasoning.
+- `settings.guard.json` — **guard profile** (recommended). Blocks reading a
+  secret-laden file into context (`PreToolUse` on Read) and withholds Bash/Grep output
+  that carries secrets (`PostToolUse`). Robust; no decoy-reasoning, no env needed;
+  already-sanitized (decoy) text passes through.
 - `settings.transparent.json` — **transparent profile**. `PostToolUse` sanitizes
   `Read`/`Bash`/`Grep` output into decoys before the model sees it; `PreToolUse`
   restores real values before a `Write`/`Edit` hits disk. The "magic" mode — see the

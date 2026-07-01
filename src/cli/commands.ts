@@ -5,12 +5,14 @@ import {
   engine,
   encryptBridge,
   decryptBridge,
+  isLikelyDecoy,
   type AuditItem,
   type EntityType,
   type MappingEntry,
   type SanitizeOptions,
   type CustomTerm,
 } from '../core/index';
+import { loadSessionMapping, saveSessionMapping } from './session';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { listFlag, numberFlag, type ParsedArgs } from './args';
@@ -311,24 +313,55 @@ export async function cmdHook(args: ParsedArgs): Promise<number> {
 }
 
 /**
- * PreToolUse guard: deny reading a file that is full of secrets, so it can't be
- * pulled into context by accident. Fail-open (allow) on any error — this is a
- * bonus safety net, not the primary control.
+ * Detect real secrets in a text, ignoring Cloakroom's own reserved-range decoys
+ * (already-sanitized content must not re-trip the guard).
+ */
+function realSecretsIn(text: string): MappingEntry[] {
+  return engine.sanitize(text).mapping.filter((m) => !isLikelyDecoy(m.type, m.original));
+}
+
+/**
+ * Guard: keep raw secrets out of the model's context WITHOUT needing a session
+ * bridge or env — it never transforms, it only blocks/withholds.
+ *   - PreToolUse (Read): deny reading a secret-laden file.
+ *   - PostToolUse (Bash/Grep): if the tool's output contains secrets, replace it
+ *     with a short notice so the raw text never reaches the model. This closes
+ *     the `cat secrets.txt`-via-shell bypass of the Read guard.
+ * Fail-open (allow) on internal errors — this is a tripwire, not the primary
+ * control; the deny/withhold paths themselves are the protection.
  */
 export async function hookGuard(evt: HookEvent): Promise<HookResponse> {
   try {
+    // PostToolUse branch: scan tool output, withhold if it carries real secrets.
+    const resp = evt.tool_response ?? evt.tool_result;
+    if (evt.hook_event_name === 'PostToolUse' && resp !== undefined && resp !== null) {
+      const found = new Map<string, MappingEntry>();
+      transformResponseText(resp, (s) => {
+        for (const m of realSecretsIn(s)) found.set(`${m.type} ${m.original}`, m);
+        return s;
+      });
+      if (found.size === 0) return null;
+      const types = [...new Set([...found.values()].map((m) => m.type))].join(', ');
+      const notice =
+        `[cloak guard: this output contained ${found.size} PII/secret value(s) (${types}) ` +
+        `and was withheld from context. Run the command through 'cloak sanitize' (or enable ` +
+        `the transparent profile) to work on a decoyed copy, or ask the user how to proceed.]`;
+      const { updated } = transformResponseText(resp, (s) => (s ? notice : s));
+      return { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } };
+    }
+
+    // PreToolUse branch: deny reading a secret-laden file.
     const file = evt.tool_input?.['file_path'];
     if (typeof file !== 'string' || !existsSync(file)) return null;
-    const text = await readFile(file, 'utf8');
-    const { audit } = engine.sanitize(text);
-    if (audit.length === 0) return null;
-    const types = [...new Set(audit.map((a) => a.type))].join(', ');
+    const secrets = realSecretsIn(await readFile(file, 'utf8'));
+    if (secrets.length === 0) return null;
+    const types = [...new Set(secrets.map((m) => m.type))].join(', ');
     return {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
         permissionDecisionReason:
-          `Cloakroom: ${file} contains ${audit.length} PII/secret value(s) (${types}). ` +
+          `Cloakroom: ${file} contains ${secrets.length} PII/secret value(s) (${types}). ` +
           `Sanitize it with 'cloak sanitize' first, or read a redacted copy — ` +
           `don't pull raw secrets into the model's context.`,
       },
@@ -363,15 +396,16 @@ export async function hookSanitize(evt: HookEvent): Promise<HookResponse> {
     return withhold('transparent mode is installed but $CLOAK_SESSION_BRIDGE / $CLOAK_PASS are not set');
   }
   try {
-    let mapping = existsSync(session.path) ? await loadMapping(session.path, session.pass) : [];
+    // Key-cached session load: PBKDF2 runs once per session, not twice per tool call.
+    const { mapping: prior, crypto: sc } = await loadSessionMapping(session.path, session.pass);
+    let mapping = prior;
     const { updated, found } = transformResponseText(resp, (s) => {
       const r = engine.sanitize(s, { priorMapping: mapping });
       mapping = r.mapping; // accumulate across stdout/stderr/content fields
       return r.sanitized;
     });
     if (!found) return null;
-    const blob = await encryptBridge(mapping, session.pass, 'realistic');
-    await writeBridge(session.path, blob);
+    await saveSessionMapping(session.path, sc, mapping);
     return { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } };
   } catch {
     return withhold('sanitization failed (wrong $CLOAK_PASS or corrupt session bridge?)');
@@ -407,7 +441,7 @@ export async function hookRestore(evt: HookEvent): Promise<HookResponse> {
   const session = sessionBridge();
   if (!session) return deny('transparent mode is installed but the session env is not set');
   try {
-    const mapping = existsSync(session.path) ? await loadMapping(session.path, session.pass) : [];
+    const { mapping } = await loadSessionMapping(session.path, session.pass);
     const updated: Record<string, unknown> = { ...input };
     for (const k of RESTORE_FIELDS) {
       if (typeof input[k] === 'string') updated[k] = engine.desanitize(input[k] as string, mapping);

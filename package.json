@@ -4,6 +4,9 @@
   "private": true,
   "description": "Client-side sanitize/restore bridge for pasting sensitive data into public LLMs.",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "cloak": "dist-cli/cloak.mjs"
   },
