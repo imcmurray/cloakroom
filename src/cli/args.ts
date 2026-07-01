@@ -15,6 +15,7 @@ const BOOLEAN_FLAGS = new Set([
   'audit',
   'json',
   'merge',
+  'force',
   'help',
   'version',
   'no-color',

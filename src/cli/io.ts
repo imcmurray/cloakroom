@@ -43,14 +43,12 @@ export async function resolvePassphrase(purpose: 'encrypt' | 'decrypt'): Promise
 function promptHidden(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const rl = createInterface({ input: process.stdin, output: process.stderr });
-    const stdout = process.stderr as NodeJS.WriteStream & { _writeToOutput?: (s: string) => void };
     // Mute echo: overwrite readline's output writer while the prompt is active.
     const origWrite = (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput;
     (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = function (s: string) {
       if (s.includes(prompt)) origWrite.call(rl, s);
       // swallow the echoed characters
     };
-    void stdout;
     rl.question(prompt, (answer) => {
       rl.close();
       process.stderr.write('\n');

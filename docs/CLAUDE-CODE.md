@@ -53,6 +53,11 @@ It reasons over nothing and can't corrupt anything — it either allows the read
 blocks it with an explanation. This is the high-value, low-risk piece, and it doubles
 as a way to keep court PII / client data out of transcripts.
 
+One honest limitation: the guard matches the `Read` tool, so a shell read (`cat
+secrets.txt` via Bash) bypasses it. Covering shell output is exactly what the
+transparent profile's `PostToolUse` sanitizer is for — the guard is a tripwire, not a
+perimeter.
+
 ### 3. Transparent auto-cloak (the magic — buildable, with sharp edges)
 
 `PostToolUse` sanitizes every `Read`/`Bash`/`Grep` result into decoys before the model
@@ -95,11 +100,20 @@ as JSON on stdin and writes a hook response on stdout:
 - `cloak hook guard` — PreToolUse. Scans `tool_input.file_path`; emits a `deny` if it
   holds secrets, otherwise nothing (allow). Fail-open on error (it's a safety net).
 - `cloak hook sanitize` — PostToolUse. Sanitizes the tool output, accumulates the
-  session bridge, emits `updatedToolOutput`. **Fail-closed**: if it can't sanitize, it
-  withholds the raw output rather than leak it.
+  session bridge, emits `updatedToolOutput`. **Fail-closed**: if it can't sanitize —
+  including when the session env vars are missing — it withholds the text rather than
+  leak it. Image reads (no text fields) pass through untouched.
 - `cloak hook restore` — PreToolUse. Restores decoys in `content` / `old_string` /
-  `new_string` to real values, emits `updatedInput`. **Fail-closed**: if it can't
-  restore, it *denies* the write rather than persist decoy data into a real file.
+  `new_string` / `command` to real values, emits `updatedInput`. **Fail-closed**: if it
+  can't restore — env missing, wrong passphrase — it *denies* the tool call rather than
+  persist decoy data into a real file (or run a command against a decoy host).
+
+Two contract details worth knowing (verified against the Claude Code binary, v2.1.198):
+the PostToolUse payload field is **`tool_response`** (`tool_result` is accepted as a
+fallback for other harnesses), and Claude Code **validates `updatedToolOutput` against
+the tool's output schema** — so the adapter preserves the response's shape (Bash
+`{stdout, stderr, …}`, Read `{file: {content, …}}`) and transforms only the
+text-bearing fields, leaving paths and metadata untouched.
 
 ## Setup
 

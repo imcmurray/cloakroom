@@ -17,6 +17,7 @@
     ],
     "PreToolUse": [
       {
+        "//": "Add |Bash to also restore decoys inside shell commands (e.g. ssh to a decoyed IP).",
         "matcher": "Write|Edit",
         "hooks": [{ "type": "command", "command": "cloak hook restore" }]
       }

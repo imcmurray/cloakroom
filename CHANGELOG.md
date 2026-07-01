@@ -21,6 +21,18 @@ versions may include breaking changes.
   `prepare` script.
 
 ### Fixed
+- **Hook contract**: `cloak hook sanitize` now reads the PostToolUse payload from
+  `tool_response` (the field Claude Code actually sends — verified against the binary;
+  the previously-used `tool_result` is kept as a fallback) and preserves the tool
+  response's object shape, since Claude Code validates `updatedToolOutput` against the
+  tool's output schema. Before this fix, transparent mode was a silent no-op.
+- **Fail-closed hardening**: `hook sanitize` and `hook restore` now fail closed when
+  `$CLOAK_SESSION_BRIDGE` / `$CLOAK_PASS` are missing (withhold output / deny the tool
+  call) instead of silently passing raw secrets or decoys through. `hook restore` also
+  covers Bash `command` inputs.
+- `cloak sanitize` refuses to overwrite an existing bridge without `--merge` or the new
+  `--force` — clobbering a bridge silently destroyed the only key that could restore
+  earlier text.
 - Credit-card detector no longer swallows a trailing space/hyphen into the match, so the
   decoy stops mashing into the following word.
 - Replaced a stray NUL-byte separator in the engine's consistency-cache key (which made

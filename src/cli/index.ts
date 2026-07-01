@@ -33,6 +33,8 @@ OPTIONS
   --min-confidence <n>   Drop detections below this confidence (0..1). Default 0.5.
   --merge                Accumulate into an existing --bridge instead of overwriting
                          it, keeping decoys consistent across calls (session use).
+  --force                Overwrite an existing --bridge, discarding its mapping.
+                         Without --merge or --force, sanitize refuses to clobber one.
   --audit                Print the masked audit to stderr after sanitize.
   --json                 Machine-readable output on stdout.
 

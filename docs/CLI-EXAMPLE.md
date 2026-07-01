@@ -116,9 +116,13 @@ names, or the email, so there was nothing to restore for those. If a value you
 Once you trust it, the whole round trip is two piped commands:
 
 ```bash
-cat ecf-incident.log | cloak sanitize --bridge ecf.cloak | pbcopy   # paste to LLM
-pbpaste                | cloak restore  --bridge ecf.cloak           # real data back
+cat ecf-incident.log | cloak sanitize --bridge ecf.cloak --merge | pbcopy   # paste to LLM
+pbpaste               | cloak restore  --bridge ecf.cloak                   # real data back
 ```
+
+(`--merge` accumulates into the bridge, so re-running against the same bridge keeps
+earlier text restorable and reuses the same decoys. Without it, sanitize refuses to
+overwrite an existing bridge — pass `--force` if you really mean to discard it.)
 
 (`pbcopy`/`pbpaste` on macOS; use `xclip -sel clip` / `xclip -o` or `wl-copy`/`wl-paste`
 on Linux.)

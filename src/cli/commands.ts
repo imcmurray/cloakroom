@@ -65,6 +65,16 @@ export async function cmdSanitize(args: ParsedArgs): Promise<number> {
   const text = await readInput(args.input);
   const merge = args.flags['merge'] === true;
 
+  // The bridge is the ONLY key that can restore earlier sanitized text.
+  // Overwriting one silently is unrecoverable data loss, so refuse unless the
+  // user chose to accumulate (--merge) or explicitly discard (--force).
+  if (existsSync(bridgePath) && !merge && args.flags['force'] !== true) {
+    throw new CliError(
+      `${bridgePath} already exists. Use --merge to accumulate into it ` +
+        `(keeps earlier text restorable) or --force to overwrite and discard the old mapping.`,
+    );
+  }
+
   // One passphrase for the whole op: needed to decrypt the prior bridge (merge)
   // and to re-encrypt the result.
   const pass = await resolvePassphrase(merge && existsSync(bridgePath) ? 'decrypt' : 'encrypt');
@@ -198,6 +208,13 @@ interface HookEvent {
   hook_event_name?: string;
   tool_name?: string;
   tool_input?: Record<string, unknown>;
+  /**
+   * PostToolUse payload field. Claude Code sends `tool_response` (verified
+   * against the installed binary's schema: {hook_event_name:"PostToolUse",
+   * tool_name, tool_input, tool_response, tool_use_id}); `tool_result` is
+   * accepted as a fallback for other harnesses.
+   */
+  tool_response?: unknown;
   tool_result?: unknown;
 }
 
@@ -212,15 +229,55 @@ function sessionBridge(): { path: string; pass: string } | null {
   return { path, pass };
 }
 
-function toolOutputText(result: unknown): string {
-  if (typeof result === 'string') return result;
-  if (result && typeof result === 'object') {
-    const r = result as Record<string, unknown>;
-    for (const k of ['output', 'stdout', 'content', 'text']) {
-      if (typeof r[k] === 'string') return r[k] as string;
-    }
+/**
+ * Text-bearing fields inside a tool_response. Claude Code VALIDATES a hook's
+ * updatedToolOutput against the tool's output schema (mismatch → the hook's
+ * output is ignored), so we must return the SAME shape with only these fields
+ * transformed — e.g. Bash `{stdout, stderr, ...}`, Read `{file: {content, ...}}`.
+ * Deliberately NOT filePath/paths: those already reached the model via
+ * tool_input (which PostToolUse cannot change), and mangling them can break
+ * the harness's file-state tracking.
+ */
+const TEXT_FIELDS = new Set(['stdout', 'stderr', 'output', 'content', 'text']);
+
+/**
+ * Deep-copy a tool_response, applying `fn` to every text-bearing string field
+ * (recursing through nested objects/arrays, e.g. Read's `file.content`).
+ * `found` reports whether any text field existed at all — false for e.g. an
+ * image read (`file.base64`), which has nothing cloak can sanitize.
+ */
+function transformResponseText(
+  resp: unknown,
+  fn: (s: string) => string,
+): { updated: unknown; found: boolean } {
+  if (typeof resp === 'string') return { updated: fn(resp), found: true };
+  if (Array.isArray(resp)) {
+    let found = false;
+    const updated = resp.map((item) => {
+      const r = transformResponseText(item, fn);
+      found = found || r.found;
+      return r.updated;
+    });
+    return { updated, found };
   }
-  return '';
+  if (resp && typeof resp === 'object') {
+    let found = false;
+    const updated: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(resp as Record<string, unknown>)) {
+      if (TEXT_FIELDS.has(k) && typeof v === 'string') {
+        updated[k] = fn(v);
+        found = true;
+      } else if (v && typeof v === 'object') {
+        const r = transformResponseText(v, fn);
+        updated[k] = r.updated;
+        found = found || r.found;
+      } else {
+        updated[k] = v;
+      }
+    }
+    return { updated, found };
+  }
+  return { updated: resp, found: false };
 }
 
 /** A hook response object to serialize to stdout, or null for a no-op. */
@@ -288,27 +345,36 @@ export async function hookGuard(evt: HookEvent): Promise<HookResponse> {
  * leak it.
  */
 export async function hookSanitize(evt: HookEvent): Promise<HookResponse> {
-  const text = toolOutputText(evt.tool_result);
-  if (!text) return null;
+  const resp = evt.tool_response ?? evt.tool_result;
+  if (resp === undefined || resp === null) return null;
+
+  // Fail-CLOSED contract: if this hook is wired up (the profile matched this
+  // tool) but we cannot sanitize — env missing, bridge unreadable, any error —
+  // we withhold the text rather than let raw secrets flow into context.
+  const withhold = (why: string): HookResponse => {
+    const msg = `[cloak: output withheld from context — ${why}]`;
+    const { updated, found } = transformResponseText(resp, (s) => (s ? msg : s));
+    if (!found) return null; // nothing text-bearing (e.g. an image read) → nothing to leak
+    return { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } };
+  };
+
   const session = sessionBridge();
-  if (!session) return null; // not configured for transparent mode → leave untouched
+  if (!session) {
+    return withhold('transparent mode is installed but $CLOAK_SESSION_BRIDGE / $CLOAK_PASS are not set');
+  }
   try {
-    const prior = existsSync(session.path) ? await loadMapping(session.path, session.pass) : undefined;
-    const result = engine.sanitize(text, { priorMapping: prior });
-    const blob = await encryptBridge(result.mapping, session.pass, 'realistic');
+    let mapping = existsSync(session.path) ? await loadMapping(session.path, session.pass) : [];
+    const { updated, found } = transformResponseText(resp, (s) => {
+      const r = engine.sanitize(s, { priorMapping: mapping });
+      mapping = r.mapping; // accumulate across stdout/stderr/content fields
+      return r.sanitized;
+    });
+    if (!found) return null;
+    const blob = await encryptBridge(mapping, session.pass, 'realistic');
     await writeBridge(session.path, blob);
-    return {
-      hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: result.sanitized },
-    };
+    return { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } };
   } catch {
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'PostToolUse',
-        updatedToolOutput:
-          '[cloak: could not sanitize this output, so it was withheld from context. ' +
-          'Check $CLOAK_SESSION_BRIDGE / $CLOAK_PASS.]',
-      },
-    };
+    return withhold('sanitization failed (wrong $CLOAK_PASS or corrupt session bridge?)');
   }
 }
 
@@ -318,27 +384,36 @@ export async function hookSanitize(evt: HookEvent): Promise<HookResponse> {
  * disk. Fail-CLOSED: if restore can't run, DENY the write rather than persist
  * decoy data into a real file.
  */
+/** tool_input fields the restore hook re-inflates (Write/Edit text + Bash commands). */
+const RESTORE_FIELDS = ['content', 'new_string', 'old_string', 'command'] as const;
+
 export async function hookRestore(evt: HookEvent): Promise<HookResponse> {
-  const session = sessionBridge();
   const input = evt.tool_input ?? {};
-  const hasText = ['content', 'new_string', 'old_string'].some((k) => typeof input[k] === 'string');
-  if (!hasText || !session) return null;
+  const hasText = RESTORE_FIELDS.some((k) => typeof input[k] === 'string');
+  if (!hasText) return null;
+
+  // Fail-CLOSED: if this hook is wired up but we can't restore, DENY the tool
+  // call rather than let decoy values reach a real file or a real command.
+  const deny = (why: string): HookResponse => ({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason:
+        `Cloakroom: blocked this tool call rather than act on decoy values — ${why}. ` +
+        'Check $CLOAK_SESSION_BRIDGE / $CLOAK_PASS.',
+    },
+  });
+
+  const session = sessionBridge();
+  if (!session) return deny('transparent mode is installed but the session env is not set');
   try {
     const mapping = existsSync(session.path) ? await loadMapping(session.path, session.pass) : [];
     const updated: Record<string, unknown> = { ...input };
-    for (const k of ['content', 'new_string', 'old_string']) {
+    for (const k of RESTORE_FIELDS) {
       if (typeof input[k] === 'string') updated[k] = engine.desanitize(input[k] as string, mapping);
     }
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: updated } };
   } catch {
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason:
-          'Cloakroom: could not restore real values before writing, so the write was blocked ' +
-          'to avoid persisting decoy data. Check $CLOAK_SESSION_BRIDGE / $CLOAK_PASS.',
-      },
-    };
+    return deny('restore failed (wrong $CLOAK_PASS or corrupt session bridge?)');
   }
 }
