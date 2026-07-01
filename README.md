@@ -88,7 +88,7 @@ Privacy claims should be checkable, not trusted. In rough order of how convincin
 
 **Phase 3:** transformers.js NER for names/orgs (opt-in model download), PWA/offline, browser extension (auto-sanitize in ChatGPT/Claude textareas), batch mode, structure-aware JSON/YAML handling.
 
-**Phase 4:** self-host bundle, team rule-sets (shared dictionaries, no shared data), CLI (`cloak < input.log`), optional privacy-hardened Worker for org telemetry counts.
+**Phase 4:** self-host bundle, team rule-sets (shared dictionaries, no shared data), ✅ CLI (`cloak`, see below), ✅ Claude Code hooks (guard + transparent sanitize/restore), MCP server for agent workflows, optional privacy-hardened Worker for org telemetry counts.
 
 ---
 
@@ -118,5 +118,49 @@ cloakroom/
 
 ```bash
 npm install
-npm test        # 7 passing: round-trip, consistency, whitelist, Luhn, crypto
+npm test        # round-trip, consistency, whitelist, Luhn, crypto, CLI arg parsing
 ```
+
+## Command line (`cloak`)
+
+The same engine the browser uses, in your terminal — for logs, CI guardrails, and
+piping into any LLM CLI. Zero runtime dependencies; the mapping is only ever
+persisted as an AES-256-GCM encrypted **bridge file** (`.cloak`).
+
+```bash
+npm run build:cli          # bundles src/cli → dist-cli/cloak.mjs (single file, Node 20+)
+npm link                   # optional: put `cloak` on your PATH
+```
+
+```bash
+# Round trip: sanitize on the way out, restore on the way back.
+cat incident.log | cloak sanitize --bridge case.cloak | pbcopy   # paste into any LLM
+pbpaste          | cloak restore  --bridge case.cloak            # real data back
+
+# Detect-only guardrail: exits 3 if any secret is present (pre-commit / CI).
+cloak scan app.log || echo "secrets found — blocking"
+
+# Masked audit of an existing bridge (never prints originals in full).
+cloak inspect --bridge case.cloak
+```
+
+Sanitized text goes to **stdout**; the masked audit and warnings go to **stderr**,
+so pipelines only ever carry decoys. The passphrase is read from `$CLOAK_PASS`
+(non-interactive pipelines) or prompted hidden on the TTY — never passed as a
+flag, so it stays out of shell history and `ps`. Commands: `sanitize`, `restore`,
+`scan`, `inspect`; run `cloak help` for all options. See `src/cli/`.
+
+For a full worked round trip on a realistic incident log — sanitize → LLM → restore,
+plus the pre-commit guardrail — see [`docs/CLI-EXAMPLE.md`](docs/CLI-EXAMPLE.md).
+
+## Inside Claude Code
+
+The same CLI wires into Claude Code via hooks so real secrets never enter the model's
+context: a **guard** hook that blocks reading secret-laden files, and a **transparent**
+mode (`PostToolUse` sanitizes tool output into decoys before the model sees it;
+`PreToolUse` restores real values before a `Write` hits disk). Because a tool the model
+*calls* is always too late to protect data from the model, the interception has to
+happen at the hook boundary. The `cloak hook <guard|sanitize|restore>` subcommand is
+the adapter; ready-to-use config is in
+[`integrations/claude-code/`](integrations/claude-code/), and the full rationale and
+trade-offs are in [`docs/CLAUDE-CODE.md`](docs/CLAUDE-CODE.md).

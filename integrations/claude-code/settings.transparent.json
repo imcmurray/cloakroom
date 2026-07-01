@@ -1,0 +1,25 @@
+{
+  "//": "Cloakroom TRANSPARENT profile for Claude Code. The 'magic' mode.",
+  "//1": "PostToolUse sanitizes Read/Bash/Grep output into decoys BEFORE the model sees it;",
+  "//2": "PreToolUse restores real values before a Write/Edit hits disk.",
+  "//3": "Do NOT combine with the guard profile (guard would deny the read the sanitizer wants).",
+  "//4": "Requires env in the shell that launches Claude Code:",
+  "//5": "  export CLOAK_SESSION_BRIDGE=\"$PWD/.cloak/session.cloak\"",
+  "//6": "  export CLOAK_PASS=\"<a session passphrase>\"",
+  "//7": "Best for logs/diagnostics/config. Risky for editing source files (the model",
+  "//8": "reasons over decoys; a reworded decoy breaks restore — reverseGaps warns, but scope with care).",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Read|Bash|Grep",
+        "hooks": [{ "type": "command", "command": "cloak hook sanitize" }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [{ "type": "command", "command": "cloak hook restore" }]
+      }
+    ]
+  }
+}
