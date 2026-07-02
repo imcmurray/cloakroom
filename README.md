@@ -38,8 +38,9 @@ this very app — is hostile: [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 version into any LLM, paste the reply back, and collect your real data. Every decoy is
 tinted by type so leftovers stand out; **select anything the detectors missed to cloak
 it everywhere, click any decoy to un-cloak a false positive** — each refinement re-runs
-the engine so the mapping stays complete and reversible. Runs entirely client-side
-(works fully offline as a PWA); nothing you paste is sent anywhere.
+the engine so the mapping stays complete and reversible. Work several documents at once
+in tabs, each with its own independent mapping. Runs entirely client-side (works fully
+offline as a PWA); nothing you paste is sent anywhere.
 
 ![Cloakroom browser app — real data is swapped for reserved-range decoys on the way out, then restored (with color-coded highlights) on the way back](./docs/screenshot.png)
 

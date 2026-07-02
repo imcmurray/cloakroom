@@ -112,7 +112,35 @@ textarea:focus-visible, button:focus-visible { outline: 2px solid var(--brass); 
 .ghost:disabled:hover { border-color: var(--line); }
 
 /* ---- stage ---- */
+.deck { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .stage { display: flex; flex-direction: column; gap: 22px; }
+
+/* document tabs */
+.tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tab {
+  display: inline-flex; align-items: center;
+  background: var(--vault); border: 1px solid var(--line); border-radius: 9px 9px 0 0;
+  border-bottom: 2px solid transparent;
+}
+.tab.on { border-bottom-color: var(--brass); background: var(--vault-2); }
+.tab-label {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: none; border: 0; cursor: pointer; color: var(--muted);
+  font: inherit; font-size: 12.5px; font-weight: 600; padding: 8px 10px 7px 12px;
+  max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tab.on .tab-label { color: var(--paper); }
+.tab-close {
+  background: none; border: 0; cursor: pointer; color: var(--muted);
+  font-size: 13px; padding: 4px 9px 4px 3px; border-radius: 6px;
+}
+.tab-close:hover { color: var(--alert); }
+.tab-new {
+  background: none; border: 1px dashed var(--line); border-radius: 9px; cursor: pointer;
+  color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; padding: 7px 12px;
+}
+.tab-new:hover { color: var(--brass); border-color: var(--brass-dim); }
+.tab .brasstag.sm { font-size: 10px; min-width: 17px; height: 17px; line-height: 17px; }
 
 .banner {
   display: flex; align-items: center; gap: 13px;

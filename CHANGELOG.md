@@ -7,6 +7,14 @@ versions may include breaking changes.
 ## [Unreleased]
 
 ### Added
+- **Document tabs in the browser app.** Work on several documents at once: each
+  tab is an independent workspace (original, sanitized result, mapping, AI reply,
+  restored output) that survives switching untouched; your sensitive terms,
+  whitelist, and mode are shared across tabs. Tabs are labeled from their content
+  and wear their claim-ticket count; closing a tab with a mapping asks first, and
+  the sidebar ticket (export) always reflects the active tab. Importing a
+  `.cloak` bridge now always opens its own tab, so it can never clobber a
+  document in progress.
 - **Review-and-refine in the browser app.** The Sanitized pane now paints every
   decoy in its type color (untinted text = untouched, so leftovers stand out);
   selecting missed text in either Outbound pane raises an action bar to cloak it
