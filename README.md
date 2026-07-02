@@ -13,7 +13,7 @@ Developers, sysadmins, lawyers, and support staff paste logs, tickets, and docum
 ChatGPT/Claude/Grok every day — leaking IPs, API keys, client names, SSNs, and internal
 paths. Cloakroom is the coat check between you and the model:
 
-![Cloakroom architecture: on your machine, real values (amber) are swapped for reserved-range decoys (teal) by the cloak engine, whose mapping never leaves; only decoys cross the trust boundary to the LLM, and the reply is restored locally. One engine powers the browser app, cloak wrap, Claude Code hooks, and the pre-commit gate.](docs/architecture.svg)
+<a href="#four-ways-to-use-it"><img src="docs/architecture.svg" alt="Cloakroom architecture: on your machine, real values (amber) are swapped for reserved-range decoys (teal) by the cloak engine, whose mapping never leaves; only decoys cross the trust boundary to the LLM, and the reply is restored locally. Below, the four doors — browser app, cloak wrap, Claude Code hooks, pre-commit gate — are spotlighted in turn, each with a one-line description. Click to jump to the four ways to use it."></a>
 
 The LLM gets coherent, useful text it can work with; your real data never crosses the
 line. The threat model assumes everything past the boundary — including the host serving
