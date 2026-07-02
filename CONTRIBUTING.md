@@ -8,9 +8,10 @@ promise credible.
 
 - **No network calls in the client or core.** The browser app ships a CSP of
   `connect-src 'none'`; the engine, CLI, and hooks must never `fetch`, open a socket, or
-  phone home. `grep -rn "fetch\|XMLHttpRequest\|WebSocket\|sendBeacon" src/` should stay
-  empty (search-tool code in a future integration is the only conceivable exception, and
-  would be opt-in and clearly marked).
+  phone home. `grep -rn "fetch\|XMLHttpRequest\|WebSocket\|sendBeacon" src/` must return
+  exactly one hit: the UI's egress probe (`src/ui/App.tsx`), a fetch that exists to be
+  blocked by the CSP so visitors can watch the block happen. Adding a second hit needs
+  an extraordinary justification and a README update in the same PR.
 - **Keep the CLI dependency-free.** `src/cli` and `src/core` have zero runtime
   dependencies on purpose — every dependency is supply-chain surface for a security tool.
   Prefer a few lines of hand-rolled code over a package. Dev/build tooling (vite, esbuild,
@@ -28,7 +29,8 @@ promise credible.
   crypto). Runs identically in the browser, a Web Worker, the CLI, and hooks. This is the
   one source of truth — add capability here, not in a consumer.
 - `src/ui/` — the React SPA.
-- `src/cli/` — the `cloak` command line and the `cloak hook` Claude Code adapter.
+- `src/cli/` — the `cloak` command line: sanitize/restore/`wrap`/scan/inspect, term
+  packs, the session key cache, and the `cloak hook` Claude Code adapter.
 - `integrations/claude-code/` — ready-to-use hook profiles and a slash command.
 - `docs/` — threat model, CLI example, Claude Code integration.
 

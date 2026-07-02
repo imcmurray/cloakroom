@@ -111,6 +111,20 @@ being honest, not failing: the model's reply simply never mentioned the SSN, the
 names, or the email, so there was nothing to restore for those. If a value you
 *expected* to see is listed there, it means the model dropped or reworded it.
 
+## The short way — `cloak wrap`
+
+Everything above in one command, when your LLM has a CLI. `wrap` sanitizes stdin
+and the child's arguments, runs the command, and restores its stdout — the mapping
+lives and dies in memory, so there is no bridge file and no passphrase at all:
+
+```bash
+cat ecf-incident.log | cloak wrap -- claude -p "diagnose this filing failure"
+```
+
+The wrapped command sees only decoys (verify: its stderr shows what it *really*
+received); your terminal shows real values. Use the manual bridge flow below when
+the LLM lives in a browser tab instead.
+
 ## The clipboard one-liner
 
 Once you trust it, the whole round trip is two piped commands:
@@ -136,16 +150,27 @@ anything. That makes it a drop-in secret-leak gate:
 cloak scan ecf-incident.log; echo $?   # → 3 (secrets present)
 ```
 
-As a git pre-commit hook that blocks a commit carrying live PII/secrets:
+The packaged way — one stanza in a repo's `.pre-commit-config.yaml` (the
+[pre-commit](https://pre-commit.com) framework installs Cloakroom itself and passes
+the staged filenames; `scan` accepts many files and reports per-file):
+
+```yaml
+repos:
+  - repo: https://github.com/imcmurray/cloakroom
+    rev: v0.2.0
+    hooks:
+      - id: cloak-scan
+        # args: [--pack, .cloak/org-terms.json]   # optional org dictionary
+```
+
+Or, without the framework, as a raw git hook:
 
 ```bash
 # .git/hooks/pre-commit
-for f in $(git diff --cached --name-only --diff-filter=ACM); do
-  cloak scan "$f" >/dev/null 2>&1 || {
-    echo "cloak: '$f' contains PII/secrets — commit blocked. Run 'cloak scan $f' to see what."
-    exit 1
-  }
-done
+git diff --cached --name-only --diff-filter=ACM | xargs -r cloak scan || {
+  echo "cloak: staged changes contain PII/secrets — commit blocked."
+  exit 1
+}
 ```
 
 ## Handling the bridge

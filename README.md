@@ -15,6 +15,8 @@ The name maps onto the round trip: like a coat check, you hand your secrets over
 
 **Elevator pitch:** Developers, sysadmins, lawyers, and support staff constantly paste logs, tickets, and documents into ChatGPT/Claude/Grok — leaking IPs, API keys, client names, SSNs, and internal paths. Cloakroom runs entirely in your browser: it detects sensitive values, swaps them for realistic decoys drawn from *reserved* ranges (RFC 5737 IPs, `example.com`, area-900 SSNs, Luhn-valid test cards), keeps a private mapping that never touches a server, and reverses the swap on the AI's response. The LLM gets coherent, useful text; your real data never leaves the machine.
 
+The same engine ships as a zero-dependency **CLI** (`cloak wrap -- claude -p "…"` runs any command over decoys), a **pre-commit gate**, and **Claude Code hooks** that keep secrets out of an agent's context — see below.
+
 ---
 
 ## Why "realistic decoys from reserved ranges" is the core trick
@@ -62,7 +64,7 @@ Privacy claims should be checkable, not trusted. In rough order of how convincin
 1. **Pull the plug.** Go offline (or DevTools → Network → *Offline*) and use it. Sanitize, encrypt a bridge file, restore — all work with zero connectivity. Software that works fully offline cannot be exfiltrating your data.
 2. **Watch the network.** Open DevTools → Network and run a full sanitize → restore. After the initial page/asset load there are **no** requests — no fetch, XHR, WebSocket, or beacon.
 3. **The browser enforces it.** The production build ships a Content-Security-Policy of `connect-src 'none'`, so the browser itself blocks every outbound request. Even injected or compromised code physically cannot phone home.
-4. **Read the source.** `grep -rn "fetch\|XMLHttpRequest\|WebSocket\|sendBeacon" src/` returns nothing. Crypto is Web Crypto (local); detection runs in a Web Worker. It's MIT — build it yourself.
+4. **Read the source.** `grep -rn "fetch\|XMLHttpRequest\|WebSocket\|sendBeacon" src/` returns exactly one hit: the in-app **egress probe**, a fetch that exists to *fail* — it fires at a dummy URL so the UI can show you the CSP blocking it live. Nothing else in `src/` (engine, CLI, hooks included) touches the network. Crypto is Web Crypto (local); detection runs in a Web Worker. It's MIT — build it yourself.
 5. **Prove the served bundle is the source (build provenance).** Every deployed file carries a signed [SLSA build-provenance attestation](https://github.com/imcmurray/cloakroom/attestations) tying it to the exact commit and CI workflow. Download an asset and verify it was built from this repo, not tampered with in transit or at the host:
    ```bash
    gh attestation verify <downloaded-asset.js> --repo imcmurray/cloakroom
@@ -88,7 +90,7 @@ Privacy claims should be checkable, not trusted. In rough order of how convincin
 
 **Phase 3:** transformers.js NER for names/orgs (opt-in model download), PWA/offline, browser extension (auto-sanitize in ChatGPT/Claude textareas), batch mode, structure-aware JSON/YAML handling.
 
-**Phase 4:** self-host bundle, team rule-sets (shared dictionaries, no shared data), ✅ CLI (`cloak`, see below), ✅ Claude Code hooks (guard + transparent sanitize/restore), MCP server for agent workflows, optional privacy-hardened Worker for org telemetry counts.
+**Phase 4:** self-host bundle, ✅ team rule-sets (term packs — shared dictionaries, no shared data), ✅ CLI (`cloak`, incl. `wrap` + pre-commit gate), ✅ Claude Code hooks (guard + transparent sanitize/restore), optional privacy-hardened Worker for org telemetry counts. An MCP server was considered and **deliberately deferred**: a model-invoked tool can't protect data from the model that invokes it — see [`docs/CLAUDE-CODE.md`](docs/CLAUDE-CODE.md).
 
 ---
 
@@ -102,23 +104,28 @@ MIT-licensed and fully self-hostable. For a privacy tool, auditability *is* the 
 
 ```
 cloakroom/
-├── src/core/            # framework-agnostic engine (this scaffold — tested, runnable)
-│   ├── types.ts         # shared data types
-│   ├── detectors.ts     # regex+validator detectors, overlap resolution
-│   ├── generators.ts    # reserved-range, format-preserving fakes
-│   ├── engine.ts        # sanitize() / desanitize() / reverseGaps()
-│   ├── crypto.ts        # Web Crypto bridge-file encrypt/decrypt
-│   ├── engine.test.ts   # round-trip + crypto tests (7 passing)
-│   └── index.ts
-├── docs/THREAT-MODEL.md
-└── (Phase 1) src/ui/    # React + TS + Tailwind SPA, runs core in a Web Worker
+├── src/core/                  # framework-agnostic engine — one source of truth for
+│   ├── detectors.ts           #   every surface (browser, CLI, hooks)
+│   ├── generators.ts          # reserved-range fakes + isLikelyDecoy()
+│   ├── engine.ts              # sanitize() / desanitize() / reverseGaps()
+│   ├── crypto.ts              # bridge encrypt/decrypt (+ key-based variants)
+│   └── types.ts, index.ts, engine.test.ts
+├── src/ui/                    # React SPA (the live demo); runs core in a Web Worker
+├── src/cli/                   # `cloak`: sanitize/restore/wrap/scan/inspect/hook,
+│                              #   term packs, session key cache, tests
+├── integrations/
+│   ├── claude-code/           # guard + transparent hook profiles, /cloak-sanitize
+│   └── packs/                 # example term pack (fictional names)
+├── .pre-commit-hooks.yaml     # `cloak-scan` for the pre-commit framework
+├── scripts/build-cli.mjs      # esbuild → dist-cli/cloak.mjs (single file, Node 20+)
+└── docs/                      # THREAT-MODEL, CLI-EXAMPLE, CLAUDE-CODE
 ```
 
 ## Run it
 
 ```bash
 npm install     # installs deps and builds the CLI (dist-cli/cloak.mjs) via `prepare`
-npm test        # round-trip, consistency, whitelist, Luhn, crypto, CLI args, hooks
+npm test        # engine round-trip/crypto, CLI args, hooks, wrap, packs, source hygiene
 ```
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the dev loop and project conventions.

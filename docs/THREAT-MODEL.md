@@ -6,10 +6,15 @@
 
 | Component | Sees plaintext? | Sees mapping? | Notes |
 |---|---|---|---|
-| Browser tab (JS) | yes | yes | The only trusted compute. Everything sensitive happens here. |
+| Browser tab (JS) | yes | yes | Trusted compute. Everything sensitive happens client-side. |
 | Web Worker | yes | yes | Same origin; isolates CPU-heavy detection from the UI thread. |
 | localStorage | yes (if user opts in) | yes | Plaintext at rest unless encrypted; off by default for mapping. |
+| `cloak` CLI process | yes | yes | Same trust position as the browser tab: local, zero runtime deps, no network. Passphrase via `$CLOAK_PASS` or hidden TTY prompt — never argv. |
+| `cloak wrap` child command | sees *sanitized* stdin+args | no | The wrapped LLM CLI gets decoys; mapping lives only in the wrap process's memory (ephemeral by default). |
+| Claude Code hooks | yes (they do the redaction) | yes | Run locally per tool call. Guard never persists anything; sanitize/restore keep the mapping in the session bridge. Fail CLOSED when misconfigured (withhold output / deny the write). |
 | `.cloak` bridge file | no | encrypted | AES-256-GCM, PBKDF2-SHA256 600k. |
+| `<bridge>.key` session keyfile | no | **decrypts the session bridge** | Hook-mode only (never interactive CLI). Mode 0600, git-ignored. Anyone who can read it can decrypt the *session* bridge — near-zero marginal risk vs. `$CLOAK_PASS` already in the same user's process env, but delete it when the session ends. Exported/shared bridges stay passphrase-only. |
+| Term pack files | no plaintext *data* — but the term list itself is sensitive | no | A pack enumerates the names you protect. Treat as an internal document; never commit a real one publicly. Configured-but-unreadable packs are a hard error (CLI) and fail closed (hooks). |
 | Static host / CDN | **no** | **no** | Serves assets only. Assumed hostile. |
 | Optional Worker | **no** | **no** | Aggregate opt-in counts only. |
 | The LLM you paste into | sees *sanitized* text | no | Gets decoys, never originals. |
@@ -23,6 +28,12 @@
 5. **Decoy mistaken for real data downstream.** Reserved/test ranges (RFC 5737/2606, area-900 SSN, test BIN) make decoys identifiable as non-real, reducing the chance someone acts on a fake IP/card.
 6. **Context loss in AI responses.** The model may paraphrase, translate, or drop a placeholder so reversal can't re-anchor it. `reverseGaps()` flags placeholders absent from the response; UI warns the user which items couldn't be restored. `token` mode reduces (not eliminates) this; realistic mode keeps decoys "echoable."
 7. **Side channels.** No analytics by default; no third-party scripts; clipboard and file reads stay local. Telemetry, if ever added, is opt-in aggregate counts with no content.
+
+## Agent-boundary threats (CLI / Claude Code surfaces)
+
+8. **A model-invoked tool is always too late.** Any sanitizer the agent *calls* (MCP tool, Bash command) runs after the agent already has the text in context. Enforcement must sit at the tool boundary — the Claude Code hooks (`PostToolUse` output rewrite, `PreToolUse` input rewrite/deny) — not in a tool the model chooses to use. This is why the deliberately-skipped MCP server would omit `restore` entirely.
+9. **Misconfiguration must not fail open.** If the transparent profile is installed but its env is missing, or a configured term pack is unreadable, the hooks withhold output / deny the call rather than silently pass raw secrets. A silent no-op sanitizer is worse than a loud broken one.
+10. **Decoy re-detection.** Scanners would flag Cloakroom's own reserved-range decoys as secrets (a decoy IP *is* an IP). `isLikelyDecoy()` recognizes the reserved ranges so already-sanitized text doesn't re-trip guards — and because those ranges are reserved, a real value can never be misclassified as a decoy.
 
 ## Honest limitations
 
