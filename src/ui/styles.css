@@ -187,6 +187,29 @@ details.help p.ex { font-family: var(--mono); background: var(--vault-3); border
 
 .warn { margin: 10px 0 0; color: var(--alert); font-size: 12px; font-weight: 600; }
 
+/* review-and-refine: decoys are clickable (un-cloak), selections raise the action bar */
+.readout .hl.decoy { cursor: pointer; }
+.readout .hl.decoy:hover { background: color-mix(in srgb, var(--c, var(--restored)) 38%, transparent); }
+.actionbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 12px; padding: 9px 12px;
+  background: var(--vault-2); border: 1px dashed var(--brass-dim); border-radius: 10px;
+  font-size: 12.5px;
+}
+.actionbar .sel-quote { font-family: var(--mono); color: var(--paper); }
+.actionbar .sel-quote code { color: var(--brass); }
+.actionbar .sel-as { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.actionbar select {
+  background: var(--vault-3); color: var(--paper); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px;
+}
+.actionbar .sel-blocked { color: var(--muted); font-style: italic; }
+.actionbar .dismiss { margin-left: auto; padding: 2px 9px; }
+.primary.sm { margin-top: 0; padding: 7px 12px; font-size: 12.5px; }
+.ghost.sm { padding: 3px 8px; font-size: 10.5px; }
+.audit li .uncloak { margin-left: auto; opacity: 0.65; }
+.audit li:hover .uncloak { opacity: 1; }
+
 /* audit ticket list */
 .audit { background: var(--vault-2); border: 1px dashed var(--brass-dim); border-radius: 14px; padding: 16px; }
 .audit ul { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 7px; }

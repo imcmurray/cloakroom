@@ -4,6 +4,19 @@ All notable changes to Cloakroom are noted here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project is pre-1.0, so minor
 versions may include breaking changes.
 
+## [Unreleased]
+
+### Added
+- **Review-and-refine in the browser app.** The Sanitized pane now paints every
+  decoy in its type color (untinted text = untouched, so leftovers stand out);
+  selecting missed text in either Outbound pane raises an action bar to cloak it
+  everywhere (with a type picker, so the decoy stays shape-matched); clicking a
+  decoy — or the new per-row audit button — un-cloaks a false positive by
+  whitelisting the original. Every change re-runs the engine, so the mapping,
+  audit, and occurrence-consistency are never bypassed; sanitized text is
+  deliberately NOT directly editable (a hand edit would have no mapping entry
+  and could not be restored).
+
 ## [0.2.0] — 2026-07-02
 
 ### Added

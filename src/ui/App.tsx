@@ -1,6 +1,7 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useMemo, useState, type CSSProperties, type ReactNode, type SyntheticEvent } from 'react';
 import { useCloakroom } from './useCloakroom';
 import { encryptBridge, decryptBridge } from '../core/crypto';
+import { decideSelectionAction, segmentizeSanitized } from './review';
 import type { CustomTerm, EntityType, MappingEntry, RestoreSegment, SanitizeResult } from '../core/types';
 
 const SAMPLE = `[2026-06-30 14:22:01] ERROR ecf: filing failed for jane.doe@example-corp.com
@@ -26,6 +27,11 @@ const TYPE_COLORS: Record<string, string> = {
 const colorFor = (t?: string): string => (t && TYPE_COLORS[t]) || '#9aa7bd';
 // Set a CSS custom property from JS (typed so TS accepts the `--c` name).
 const cssVar = (name: string, value: string): CSSProperties => ({ [name]: value }) as CSSProperties;
+
+const trunc = (s: string, n = 28): string => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+
+/** Types a user can hand-pick for a selected term — decoys stay shape-matched. */
+const CLOAK_TYPES: EntityType[] = ['CUSTOM', 'PERSON', 'ORG', 'CASE_NAME', 'CASE_NUMBER'];
 
 // "value" or "value | ORG" per line.
 function parseTerms(raw: string): CustomTerm[] {
@@ -57,19 +63,28 @@ export function App() {
   const [inboundOpen, setInboundOpen] = useState(false);
   const [egress, setEgress] = useState<'idle' | 'testing' | 'blocked' | 'allowed'>('idle');
   const [flash, setFlash] = useState<string | null>(null);
+  // Review-and-refine: the active text selection (from either Outbound pane)
+  // and the entity type the next cloaked term should decoy as.
+  const [sel, setSel] = useState<string | null>(null);
+  const [selType, setSelType] = useState<EntityType>('CUSTOM');
 
   const mapping = result?.mapping ?? [];
+  const sanitizedSegs = useMemo(
+    () => (result ? segmentizeSanitized(result.sanitized, result.mapping) : []),
+    [result],
+  );
+  const selAction = useMemo(() => (sel !== null ? decideSelectionAction(sel, mapping) : null), [sel, mapping]);
 
   const note = (m: string) => {
     setFlash(m);
     window.setTimeout(() => setFlash(null), 2200);
   };
 
-  async function runSanitize() {
+  async function runSanitizeWith(termsStr: string, wlStr: string, quiet = false) {
     const res = await sanitize(original, {
       mode,
-      customTerms: parseTerms(terms),
-      whitelist: whitelist.split('\n').map((s) => s.trim()).filter(Boolean),
+      customTerms: parseTerms(termsStr),
+      whitelist: wlStr.split('\n').map((s) => s.trim()).filter(Boolean),
     });
     setResult(res);
     setRestored('');
@@ -78,7 +93,51 @@ export function App() {
     setImported(false);
     setOutboundOpen(true);
     setInboundOpen(false);
-    note(`Sanitized — ${res.mapping.length} item${res.mapping.length === 1 ? '' : 's'} swapped`);
+    setSel(null);
+    if (!quiet) note(`Sanitized — ${res.mapping.length} item${res.mapping.length === 1 ? '' : 's'} swapped`);
+    return res;
+  }
+
+  const runSanitize = () => runSanitizeWith(terms, whitelist);
+
+  /** Selection → custom term: append to the terms list and re-sanitize. */
+  async function cloakSelection(value: string, type: EntityType) {
+    if (parseTerms(terms).some((t) => t.value === value)) {
+      setSel(null);
+      return note('Already in your terms list');
+    }
+    const nextTerms = (terms.trim() ? terms.replace(/\n*$/, '\n') : '') + `${value} | ${type}`;
+    setTerms(nextTerms);
+    const res = await runSanitizeWith(nextTerms, whitelist, true);
+    const hit = res.mapping.find((m) => m.original === value);
+    note(hit ? `Cloaked “${trunc(value)}” — ${hit.count} occurrence${hit.count === 1 ? '' : 's'}` : `Added “${trunc(value)}” to your terms`);
+  }
+
+  /** Decoy (or its original) → whitelist: a one-click false-positive fix. */
+  async function uncloak(entry: MappingEntry) {
+    const nextWl = (whitelist.trim() ? whitelist.replace(/\n*$/, '\n') : '') + entry.original;
+    // If the value came from a custom term, retire that line too.
+    const nextTerms = terms
+      .split('\n')
+      .filter((l) => l.split('|')[0].trim() !== entry.original)
+      .join('\n');
+    setWhitelist(nextWl);
+    setTerms(nextTerms);
+    await runSanitizeWith(nextTerms, nextWl, true);
+    note(`Un-cloaked “${trunc(entry.original)}” — added to your never-touch list`);
+  }
+
+  /** Selection capture from the Original textarea. */
+  function onOriginalSelect(e: SyntheticEvent<HTMLTextAreaElement>) {
+    const el = e.currentTarget;
+    const text = original.slice(el.selectionStart ?? 0, el.selectionEnd ?? 0);
+    if (text.trim()) setSel(text);
+  }
+
+  /** Selection capture from the Sanitized readout. */
+  function onSanitizedMouseUp() {
+    const text = window.getSelection()?.toString() ?? '';
+    if (text.trim()) setSel(text);
   }
 
   async function runRestore() {
@@ -242,15 +301,63 @@ export function App() {
             {outboundOpen && (
               <>
                 <div className="panes">
-                  <Pane label="Original" sub="paste your raw text/logs">
-                    <textarea value={original} onChange={(e) => setOriginal(e.target.value)} spellCheck={false} />
+                  <Pane label="Original" sub="paste your raw text/logs — select anything we should cloak">
+                    <textarea value={original} onChange={(e) => setOriginal(e.target.value)}
+                      onSelect={onOriginalSelect} onMouseUp={onOriginalSelect} onKeyUp={onOriginalSelect}
+                      spellCheck={false} />
                   </Pane>
                   <div className="arrow" aria-hidden>→</div>
-                  <Pane label="Sanitized" sub="safe to paste into any LLM"
+                  <Pane label="Sanitized" sub="tinted = decoyed · select missed text to cloak it · click a decoy to un-cloak"
                     action={result?.sanitized && <button className="ghost" onClick={() => { copy(result.sanitized, 'sanitized'); setInboundOpen(true); }}>Copy</button>}>
-                    <pre className="readout">{result?.sanitized || <span className="placeholder">Run sanitize to see decoyed output…</span>}</pre>
+                    <pre className="readout" onMouseUp={onSanitizedMouseUp}>
+                      {result ? (
+                        sanitizedSegs.map((s, i) =>
+                          s.entry ? (
+                            <mark key={i} className="hl decoy" style={cssVar('--c', colorFor(s.entry.type))}
+                              title={`${s.entry.type} decoy — click to un-cloak`}
+                              onClick={() => uncloak(s.entry!)}>
+                              {s.text}
+                            </mark>
+                          ) : (
+                            <span key={i}>{s.text}</span>
+                          ),
+                        )
+                      ) : (
+                        <span className="placeholder">Run sanitize to see decoyed output…</span>
+                      )}
+                    </pre>
                   </Pane>
                 </div>
+                {sel !== null && selAction && (
+                  <div className="actionbar" role="toolbar" aria-label="Selection actions">
+                    {selAction.kind === 'cloak' && (
+                      <>
+                        <span className="sel-quote">“{trunc(selAction.value, 44)}”</span>
+                        <label className="sel-as">
+                          as
+                          <select value={selType} onChange={(e) => setSelType(e.target.value as EntityType)}>
+                            {CLOAK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </label>
+                        <button className="primary sm" onClick={() => cloakSelection(selAction.value, selType)}>
+                          Cloak everywhere
+                        </button>
+                      </>
+                    )}
+                    {selAction.kind === 'uncloak' && (
+                      <>
+                        <span className="sel-quote">
+                          “{trunc(selAction.entry.original, 34)}” <span className="to">⇄</span> <code>{trunc(selAction.entry.placeholder, 34)}</code>
+                        </span>
+                        <button className="primary sm" onClick={() => uncloak(selAction.entry)}>
+                          Un-cloak (never touch)
+                        </button>
+                      </>
+                    )}
+                    {selAction.kind === 'blocked' && <span className="sel-blocked">{selAction.reason}</span>}
+                    <button className="ghost dismiss" aria-label="Dismiss" onClick={() => setSel(null)}>×</button>
+                  </div>
+                )}
                 <button className="primary" onClick={runSanitize}>Sanitize</button>
                 {residualWarning && <p className="warn">Heads up: a secret-shaped string may still be present. Review before copying.</p>}
               </>
@@ -318,15 +425,24 @@ export function App() {
             <div className="audit">
               <div className="eyebrow">What was swapped <span className="hint">(visible only to you)</span></div>
               <ul>
-                {result.audit.map((a) => (
-                  <li key={a.placeholder}>
-                    <span className="tag">{a.type}</span>
-                    <span className="mask">{a.preview}</span>
-                    <span className="to">→</span>
-                    <code>{a.placeholder}</code>
-                    {a.count > 1 && <span className="count">×{a.count}</span>}
-                  </li>
-                ))}
+                {result.audit.map((a) => {
+                  const entry = mapping.find((m) => m.placeholder === a.placeholder);
+                  return (
+                    <li key={a.placeholder}>
+                      <span className="tag">{a.type}</span>
+                      <span className="mask">{a.preview}</span>
+                      <span className="to">→</span>
+                      <code>{a.placeholder}</code>
+                      {a.count > 1 && <span className="count">×{a.count}</span>}
+                      {entry && (
+                        <button className="ghost sm uncloak" title="False positive? Whitelist it and re-sanitize"
+                          onClick={() => uncloak(entry)}>
+                          un-cloak
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
