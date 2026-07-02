@@ -13,7 +13,16 @@ Developers, sysadmins, lawyers, and support staff paste logs, tickets, and docum
 ChatGPT/Claude/Grok every day — leaking IPs, API keys, client names, SSNs, and internal
 paths. Cloakroom is the coat check between you and the model:
 
-<a href="#four-ways-to-use-it"><img src="docs/architecture.svg" alt="Cloakroom architecture: on your machine, real values (amber) are swapped for reserved-range decoys (teal) by the cloak engine, whose mapping never leaves; only decoys cross the trust boundary to the LLM, and the reply is restored locally. Below, the four doors — browser app, cloak wrap, Claude Code hooks, pre-commit gate — are spotlighted in turn, each with a one-line description. Click to jump to the four ways to use it."></a>
+<p align="center">
+  <a href="#four-ways-to-use-it"><img src="docs/architecture.svg" alt="Cloakroom architecture: on your machine, real values (amber) are swapped for reserved-range decoys (teal) by the cloak engine, whose mapping never leaves; only decoys cross the trust boundary to the LLM, and the reply is restored locally."></a>
+  <br>
+  <sub>one engine, four doors — take one:</sub>
+  <br>
+  <a href="#1--in-the-browser--zero-install"><img src="docs/doors/browser.svg" alt="browser app — jump to section 1"></a>
+  <a href="#2--on-the-command-line--cloak-wrap"><img src="docs/doors/wrap.svg" alt="cloak wrap — jump to section 2"></a>
+  <a href="#3--as-a-pre-commit-gate--keep-secrets-out-of-git-history"><img src="docs/doors/gate.svg" alt="pre-commit gate — jump to section 3"></a>
+  <a href="#4--inside-claude-code--hooks-not-tools"><img src="docs/doors/hooks.svg" alt="Claude Code hooks — jump to section 4"></a>
+</p>
 
 The LLM gets coherent, useful text it can work with; your real data never crosses the
 line. The threat model assumes everything past the boundary — including the host serving

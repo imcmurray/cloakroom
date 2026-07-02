@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 38" width="140" height="38" role="img" aria-label="cloak wrap — jump to this section">
+<style>
+@keyframes ring_wrap{0%,25.0%{stroke:#2A3242}26.5%,48.5%{stroke:#4FD6C4}50.0%,100%{stroke:#2A3242}}
+@keyframes lbl_wrap{0%,25.0%{fill:#8B96AA}26.5%,48.5%{fill:#E8F2FA}50.0%,100%{fill:#8B96AA}}
+.chip_wrap{animation:ring_wrap 20s linear infinite}
+.lbl_wrap{font-family:'JetBrains Mono','Fira Code','SF Mono',ui-monospace,Menlo,Consolas,monospace;font-size:12px;animation:lbl_wrap 20s linear infinite}
+@media (prefers-reduced-motion:reduce){.chip_wrap,.lbl_wrap{animation:none}.lbl_wrap{fill:#C9D2E0}}
+</style>
+<rect class="chip_wrap" x="4" y="4" width="132" height="30" rx="15" fill="#131926" stroke="#2A3242" stroke-width="1.4"/>
+<text class="lbl_wrap" x="70" y="23" text-anchor="middle" fill="#8B96AA">cloak wrap</text>
+</svg>

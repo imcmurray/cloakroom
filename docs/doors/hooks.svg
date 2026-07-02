@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 168 38" width="168" height="38" role="img" aria-label="Claude Code hooks — jump to this section">
+<style>
+@keyframes ring_hooks{0%,75.0%{stroke:#2A3242}76.5%,98.5%{stroke:#4FD6C4}100.0%,100%{stroke:#2A3242}}
+@keyframes lbl_hooks{0%,75.0%{fill:#8B96AA}76.5%,98.5%{fill:#E8F2FA}100.0%,100%{fill:#8B96AA}}
+.chip_hooks{animation:ring_hooks 20s linear infinite}
+.lbl_hooks{font-family:ui-sans-serif,system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;animation:lbl_hooks 20s linear infinite}
+@media (prefers-reduced-motion:reduce){.chip_hooks,.lbl_hooks{animation:none}.lbl_hooks{fill:#C9D2E0}}
+</style>
+<rect class="chip_hooks" x="4" y="4" width="160" height="30" rx="15" fill="#131926" stroke="#2A3242" stroke-width="1.4"/>
+<text class="lbl_hooks" x="84" y="23" text-anchor="middle" fill="#8B96AA">Claude Code hooks</text>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 158 38" width="158" height="38" role="img" aria-label="pre-commit gate — jump to this section">
+<style>
+@keyframes ring_gate{0%,50.0%{stroke:#2A3242}51.5%,73.5%{stroke:#4FD6C4}75.0%,100%{stroke:#2A3242}}
+@keyframes lbl_gate{0%,50.0%{fill:#8B96AA}51.5%,73.5%{fill:#E8F2FA}75.0%,100%{fill:#8B96AA}}
+.chip_gate{animation:ring_gate 20s linear infinite}
+.lbl_gate{font-family:ui-sans-serif,system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;animation:lbl_gate 20s linear infinite}
+@media (prefers-reduced-motion:reduce){.chip_gate,.lbl_gate{animation:none}.lbl_gate{fill:#C9D2E0}}
+</style>
+<rect class="chip_gate" x="4" y="4" width="150" height="30" rx="15" fill="#131926" stroke="#2A3242" stroke-width="1.4"/>
+<text class="lbl_gate" x="79" y="23" text-anchor="middle" fill="#8B96AA">pre-commit gate</text>
+</svg>

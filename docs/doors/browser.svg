@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 38" width="140" height="38" role="img" aria-label="browser app — jump to this section">
+<style>
+@keyframes ring_browser{0%,23.5%{stroke:#4FD6C4}25.0%,100%{stroke:#2A3242}}
+@keyframes lbl_browser{0%,23.5%{fill:#E8F2FA}25.0%,100%{fill:#8B96AA}}
+.chip_browser{animation:ring_browser 20s linear infinite}
+.lbl_browser{font-family:ui-sans-serif,system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;animation:lbl_browser 20s linear infinite}
+@media (prefers-reduced-motion:reduce){.chip_browser,.lbl_browser{animation:none}.lbl_browser{fill:#C9D2E0}}
+</style>
+<rect class="chip_browser" x="4" y="4" width="132" height="30" rx="15" fill="#131926" stroke="#2A3242" stroke-width="1.4"/>
+<text class="lbl_browser" x="70" y="23" text-anchor="middle" fill="#8B96AA">browser app</text>
+</svg>
