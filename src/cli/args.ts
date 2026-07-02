@@ -7,6 +7,10 @@ export interface ParsedArgs {
   command: string;
   /** First non-flag positional, or '-' / undefined. Usually the input file. */
   input?: string;
+  /** ALL non-flag positionals, in order (pre-commit passes many filenames). */
+  inputs: string[];
+  /** Everything after a literal `--`: the child command for `cloak wrap`. */
+  passthrough: string[];
   flags: Record<string, string | true>;
 }
 
@@ -24,12 +28,18 @@ const BOOLEAN_FLAGS = new Set([
 export function parseArgs(argv: string[]): ParsedArgs {
   const [command = 'help', ...rest] = argv;
   const flags: Record<string, string | true> = {};
-  let input: string | undefined;
+  const inputs: string[] = [];
+  const passthrough: string[] = [];
 
   for (let i = 0; i < rest.length; i++) {
     const tok = rest[i];
+    if (tok === '--') {
+      // Everything after a literal `--` belongs to the wrapped child command.
+      passthrough.push(...rest.slice(i + 1));
+      break;
+    }
     if (tok === '-') {
-      input = '-';
+      inputs.push('-');
       continue;
     }
     if (tok.startsWith('--')) {
@@ -53,11 +63,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
       }
       continue;
     }
-    // First bare token is the positional input; ignore extras.
-    if (input === undefined) input = tok;
+    inputs.push(tok);
   }
 
-  return { command, input, flags };
+  return { command, input: inputs[0], inputs, passthrough, flags };
 }
 
 /** Read a flag as a comma-separated list, trimming blanks. */

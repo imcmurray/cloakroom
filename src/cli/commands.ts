@@ -13,6 +13,7 @@ import {
   type CustomTerm,
 } from '../core/index';
 import { loadSessionMapping, saveSessionMapping } from './session';
+import { loadPacks, packPaths, type PackOptions } from './packs';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { listFlag, numberFlag, type ParsedArgs } from './args';
@@ -35,19 +36,22 @@ function requireBridge(flags: ParsedArgs['flags']): string {
   return b;
 }
 
-function buildOptions(flags: ParsedArgs['flags']): SanitizeOptions {
+export async function buildOptions(flags: ParsedArgs['flags']): Promise<SanitizeOptions> {
   const mode = flags['mode'];
   if (mode !== undefined && mode !== 'realistic' && mode !== 'token') {
     throw new CliError(`--mode must be 'realistic' or 'token', got '${String(mode)}'.`);
   }
-  const customTerms: CustomTerm[] | undefined = listFlag(flags['custom'])?.map((value) => ({
-    value,
-  }));
+  const packs = await loadPacks(packPaths(flags['pack']));
+  const customTerms: CustomTerm[] = [
+    ...packs.customTerms,
+    ...(listFlag(flags['custom'])?.map((value) => ({ value })) ?? []),
+  ];
+  const whitelist = [...packs.whitelist, ...(listFlag(flags['whitelist']) ?? [])];
   return {
     mode: (mode as 'realistic' | 'token' | undefined) ?? 'realistic',
     enabledTypes: listFlag(flags['types']) as EntityType[] | undefined,
-    whitelist: listFlag(flags['whitelist']),
-    customTerms,
+    whitelist: whitelist.length ? whitelist : undefined,
+    customTerms: customTerms.length ? customTerms : undefined,
     minConfidence: numberFlag(flags['min-confidence']),
   };
 }
@@ -63,7 +67,7 @@ function renderAudit(audit: AuditItem[]): string {
 
 export async function cmdSanitize(args: ParsedArgs): Promise<number> {
   const bridgePath = requireBridge(args.flags);
-  const opts = buildOptions(args.flags);
+  const opts = await buildOptions(args.flags);
   const text = await readInput(args.input);
   const merge = args.flags['merge'] === true;
 
@@ -137,18 +141,31 @@ export async function cmdRestore(args: ParsedArgs): Promise<number> {
 }
 
 export async function cmdScan(args: ParsedArgs): Promise<number> {
-  const opts = buildOptions(args.flags);
-  const text = await readInput(args.input);
-  // Detect-only: reuse the engine but discard the mapping entirely.
-  const { audit } = engine.sanitize(text, opts);
+  const opts = await buildOptions(args.flags);
+  // Accept MANY files (pre-commit passes the staged filenames); no files = stdin.
+  const files = args.inputs.length > 0 ? args.inputs : [undefined];
+
+  let total = 0;
+  const perFile: Array<{ file: string; audit: AuditItem[] }> = [];
+  for (const f of files) {
+    const text = await readInput(f);
+    // Detect-only: reuse the engine but discard the mapping entirely.
+    const { audit } = engine.sanitize(text, opts);
+    total += audit.length;
+    perFile.push({ file: f ?? '-', audit });
+  }
 
   if (args.flags['json']) {
-    out(JSON.stringify({ found: audit.length, audit }));
+    out(JSON.stringify({ found: total, files: perFile }));
   } else {
-    err(renderAudit(audit));
+    for (const r of perFile) {
+      if (files.length > 1 && r.audit.length > 0) err(`${r.file}:`);
+      if (files.length === 1 || r.audit.length > 0) err(renderAudit(r.audit));
+    }
+    if (files.length > 1 && total === 0) err('No sensitive values detected.');
   }
   // Exit 3 on any hit so `cloak scan` composes as a pre-commit / CI guardrail.
-  return audit.length > 0 ? 3 : 0;
+  return total > 0 ? 3 : 0;
 }
 
 export async function cmdInspect(args: ParsedArgs): Promise<number> {
@@ -293,13 +310,14 @@ export async function cmdHook(args: ParsedArgs): Promise<number> {
   } catch {
     return 0; // malformed event → no-op, never break the session
   }
+  const packFlag = args.flags['pack'];
   let response: HookResponse;
   switch (mode) {
     case 'guard':
-      response = await hookGuard(evt);
+      response = await hookGuard(evt, packFlag);
       break;
     case 'sanitize':
-      response = await hookSanitize(evt);
+      response = await hookSanitize(evt, packFlag);
       break;
     case 'restore':
       response = await hookRestore(evt);
@@ -312,12 +330,49 @@ export async function cmdHook(args: ParsedArgs): Promise<number> {
   return 0;
 }
 
+const NO_PACKS: PackOptions = { customTerms: [], whitelist: [] };
+
+/** Resolve term packs for a hook: $CLOAK_PACKS plus an optional --pack flag
+ *  on the hook's command line. Throws CliError on an unreadable pack. */
+async function hookPacks(packFlag?: string | true): Promise<PackOptions> {
+  return loadPacks(packPaths(packFlag));
+}
+
+/** Were packs explicitly configured (so a load failure must fail closed)? */
+function packsConfigured(packFlag?: string | true): boolean {
+  return Boolean(process.env.CLOAK_PACKS) || typeof packFlag === 'string';
+}
+
+/** Fail-closed response when configured term packs can't be loaded in guard mode. */
+function guardPackFailure(evt: HookEvent): HookResponse {
+  const resp = evt.tool_response ?? evt.tool_result;
+  if (evt.hook_event_name === 'PostToolUse' && resp !== undefined && resp !== null) {
+    const notice = '[cloak guard: term packs unreadable ($CLOAK_PACKS / --pack) — output withheld from context.]';
+    const { updated, found } = transformResponseText(resp, (s) => (s ? notice : s));
+    return found
+      ? { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } }
+      : null;
+  }
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason:
+        'Cloakroom: term packs are configured but unreadable ($CLOAK_PACKS / --pack), so the guard ' +
+        'cannot check org-specific terms. Fix the pack path before reading files.',
+    },
+  };
+}
+
 /**
  * Detect real secrets in a text, ignoring Cloakroom's own reserved-range decoys
- * (already-sanitized content must not re-trip the guard).
+ * (already-sanitized content must not re-trip the guard). Pack terms count as
+ * secrets; pack whitelist entries never do.
  */
-function realSecretsIn(text: string): MappingEntry[] {
-  return engine.sanitize(text).mapping.filter((m) => !isLikelyDecoy(m.type, m.original));
+function realSecretsIn(text: string, packs: PackOptions = NO_PACKS): MappingEntry[] {
+  return engine
+    .sanitize(text, { customTerms: packs.customTerms, whitelist: packs.whitelist })
+    .mapping.filter((m) => !isLikelyDecoy(m.type, m.original));
 }
 
 /**
@@ -330,14 +385,22 @@ function realSecretsIn(text: string): MappingEntry[] {
  * Fail-open (allow) on internal errors — this is a tripwire, not the primary
  * control; the deny/withhold paths themselves are the protection.
  */
-export async function hookGuard(evt: HookEvent): Promise<HookResponse> {
+export async function hookGuard(evt: HookEvent, packFlag?: string | true): Promise<HookResponse> {
+  // Term packs: if explicitly configured but unreadable, fail CLOSED — a
+  // silently-skipped pack means silently-unguarded names.
+  let packs = NO_PACKS;
+  try {
+    packs = await hookPacks(packFlag);
+  } catch {
+    if (packsConfigured(packFlag)) return guardPackFailure(evt);
+  }
   try {
     // PostToolUse branch: scan tool output, withhold if it carries real secrets.
     const resp = evt.tool_response ?? evt.tool_result;
     if (evt.hook_event_name === 'PostToolUse' && resp !== undefined && resp !== null) {
       const found = new Map<string, MappingEntry>();
       transformResponseText(resp, (s) => {
-        for (const m of realSecretsIn(s)) found.set(`${m.type} ${m.original}`, m);
+        for (const m of realSecretsIn(s, packs)) found.set(`${m.type}:${m.original}`, m);
         return s;
       });
       if (found.size === 0) return null;
@@ -353,7 +416,7 @@ export async function hookGuard(evt: HookEvent): Promise<HookResponse> {
     // PreToolUse branch: deny reading a secret-laden file.
     const file = evt.tool_input?.['file_path'];
     if (typeof file !== 'string' || !existsSync(file)) return null;
-    const secrets = realSecretsIn(await readFile(file, 'utf8'));
+    const secrets = realSecretsIn(await readFile(file, 'utf8'), packs);
     if (secrets.length === 0) return null;
     const types = [...new Set(secrets.map((m) => m.type))].join(', ');
     return {
@@ -377,7 +440,7 @@ export async function hookGuard(evt: HookEvent): Promise<HookResponse> {
  * Fail-CLOSED: if sanitization can't run, withhold the raw output rather than
  * leak it.
  */
-export async function hookSanitize(evt: HookEvent): Promise<HookResponse> {
+export async function hookSanitize(evt: HookEvent, packFlag?: string | true): Promise<HookResponse> {
   const resp = evt.tool_response ?? evt.tool_result;
   if (resp === undefined || resp === null) return null;
 
@@ -395,12 +458,23 @@ export async function hookSanitize(evt: HookEvent): Promise<HookResponse> {
   if (!session) {
     return withhold('transparent mode is installed but $CLOAK_SESSION_BRIDGE / $CLOAK_PASS are not set');
   }
+  // Fail closed on unreadable packs: missing terms would sanitize incompletely.
+  let packs = NO_PACKS;
+  try {
+    packs = await hookPacks(packFlag);
+  } catch {
+    if (packsConfigured(packFlag)) return withhold('term packs unreadable ($CLOAK_PACKS / --pack)');
+  }
   try {
     // Key-cached session load: PBKDF2 runs once per session, not twice per tool call.
     const { mapping: prior, crypto: sc } = await loadSessionMapping(session.path, session.pass);
     let mapping = prior;
     const { updated, found } = transformResponseText(resp, (s) => {
-      const r = engine.sanitize(s, { priorMapping: mapping });
+      const r = engine.sanitize(s, {
+        priorMapping: mapping,
+        customTerms: packs.customTerms,
+        whitelist: packs.whitelist,
+      });
       mapping = r.mapping; // accumulate across stdout/stderr/content fields
       return r.sanitized;
     });

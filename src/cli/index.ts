@@ -7,8 +7,9 @@
 import { parseArgs } from './args';
 import { CliError, err } from './io';
 import { cmdHook, cmdInspect, cmdRestore, cmdSanitize, cmdScan } from './commands';
+import { cmdWrap } from './wrap';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 const HELP = `cloak — check your secrets at the door, get them back on the way out.
 
@@ -18,7 +19,10 @@ USAGE
 COMMANDS
   sanitize   Replace secrets with realistic decoys; write an encrypted mapping.
   restore    Re-inflate real data from a sanitized/AI-returned text.
-  scan       Detect-only. Prints a masked audit; exits 3 if anything is found.
+  wrap       Run a command with stdin+args sanitized and stdout restored:
+             cat log | cloak wrap -- claude -p "diagnose". No bridge needed.
+  scan       Detect-only; accepts many files (pre-commit passes filenames).
+             Prints a masked audit; exits 3 if anything is found.
   inspect    Show the masked audit of an existing bridge file.
   hook       Claude Code hook adapter (guard|sanitize|restore); reads a hook
              event as JSON on stdin, writes a hook response on stdout.
@@ -30,6 +34,8 @@ OPTIONS
   --types <A,B,...>      Only replace these entity types (e.g. IPV4,EMAIL,SSN).
   --whitelist <a,b,...>  Literal strings to never replace (e.g. localhost).
   --custom <a,b,...>     Extra sensitive literals to always replace (names, codenames).
+  --pack <a.json,...>    Term pack file(s): shared dictionaries of custom terms +
+                         whitelist. Also read from $CLOAK_PACKS (colon-separated).
   --min-confidence <n>   Drop detections below this confidence (0..1). Default 0.5.
   --merge                Accumulate into an existing --bridge instead of overwriting
                          it, keeping decoys consistent across calls (session use).
@@ -42,9 +48,11 @@ PASSPHRASE
   Read from $CLOAK_PASS, else prompted (hidden) on the TTY. Never passed as a flag.
 
 EXAMPLES
+  cat incident.log | cloak wrap -- claude -p "diagnose this"   # zero-setup round trip
   cat incident.log | cloak sanitize --bridge case.cloak | pbcopy
   pbpaste | cloak restore --bridge case.cloak
-  cloak scan src/ -  < app.log        # exit 3 if secrets present (CI guardrail)
+  cloak scan file1.log file2.txt      # exit 3 if secrets present (pre-commit/CI)
+  cloak sanitize app.log --pack moss.json --bridge s.cloak
   cloak inspect --bridge case.cloak
 `;
 
@@ -65,6 +73,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdSanitize(args);
     case 'restore':
       return cmdRestore(args);
+    case 'wrap':
+      return cmdWrap(args);
     case 'scan':
       return cmdScan(args);
     case 'inspect':

@@ -135,12 +135,18 @@ npm link                   # optional: put `cloak` on your PATH
 ```
 
 ```bash
-# Round trip: sanitize on the way out, restore on the way back.
+# Zero-setup round trip: run ANY command inside the cloak. stdin and args are
+# sanitized on the way in, stdout restored on the way out; the mapping lives
+# and dies in memory — no bridge file, no passphrase.
+cat incident.log | cloak wrap -- claude -p "diagnose this failure"
+cat ticket.txt   | cloak wrap -- llm "summarize the customer issue"
+
+# Manual round trip via an encrypted bridge (for paste-into-a-browser flows).
 cat incident.log | cloak sanitize --bridge case.cloak | pbcopy   # paste into any LLM
 pbpaste          | cloak restore  --bridge case.cloak            # real data back
 
 # Detect-only guardrail: exits 3 if any secret is present (pre-commit / CI).
-cloak scan app.log || echo "secrets found — blocking"
+cloak scan app.log deploy.env || echo "secrets found — blocking"
 
 # Masked audit of an existing bridge (never prints originals in full).
 cloak inspect --bridge case.cloak
@@ -150,7 +156,39 @@ Sanitized text goes to **stdout**; the masked audit and warnings go to **stderr*
 so pipelines only ever carry decoys. The passphrase is read from `$CLOAK_PASS`
 (non-interactive pipelines) or prompted hidden on the TTY — never passed as a
 flag, so it stays out of shell history and `ps`. Commands: `sanitize`, `restore`,
-`scan`, `inspect`; run `cloak help` for all options. See `src/cli/`.
+`wrap`, `scan`, `inspect`, `hook`; run `cloak help` for all options. See `src/cli/`.
+
+### Term packs — team dictionaries
+
+A term pack is a JSON file declaring your org's sensitive literals (people, org
+names, codenames → always replaced) and known-safe ones (public hostnames → never
+replaced). One maintained dictionary instead of per-user `--custom` flags:
+
+```bash
+cloak sanitize app.log --pack moss-terms.json --bridge s.cloak
+export CLOAK_PACKS=/etc/cloak/moss-terms.json   # applies everywhere: CLI, wrap, hooks
+```
+
+See [`integrations/packs/example-courthouse.json`](integrations/packs/example-courthouse.json)
+for the format. Fair warning, stated plainly: a real pack is itself a list of the
+names you protect — keep it on an internal share or private repo. If a configured
+pack can't be read, commands error and hooks fail closed; terms are never silently
+skipped.
+
+### Pre-commit gate
+
+Block commits containing PII/secrets with one stanza in a repo's
+`.pre-commit-config.yaml` (uses the [pre-commit](https://pre-commit.com) framework):
+
+```yaml
+repos:
+  - repo: https://github.com/imcmurray/cloakroom
+    rev: v0.2.0
+    hooks:
+      - id: cloak-scan
+```
+
+The masked audit on stderr shows what was caught; originals are never printed.
 
 For a full worked round trip on a realistic incident log — sanitize → LLM → restore,
 plus the pre-commit guardrail — see [`docs/CLI-EXAMPLE.md`](docs/CLI-EXAMPLE.md).

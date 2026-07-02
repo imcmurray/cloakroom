@@ -4,9 +4,26 @@ All notable changes to Cloakroom are noted here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project is pre-1.0, so minor
 versions may include breaking changes.
 
-## [Unreleased]
+## [0.2.0] — 2026-07-02
 
 ### Added
+- **`cloak wrap -- <command>`** — run any command inside the cloak: stdin and the
+  child's arguments are sanitized on the way in, its stdout is restored (line-buffered,
+  streaming-friendly) on the way out. Sanitize+restore share one process, so the
+  default needs no bridge file and no passphrase; `--bridge`/`--merge` optionally
+  persist the mapping. Child stderr passes through; exit code propagates.
+- **Term packs** — shareable JSON dictionaries of org-specific custom terms and
+  whitelist entries, loaded via `--pack a.json,b.json` or `$CLOAK_PACKS` (colon-
+  separated) across the CLI, `wrap`, and the Claude Code hooks. Unreadable configured
+  packs are a hard error (CLI) or fail closed (hooks) — terms are never silently
+  skipped. Example: `integrations/packs/example-courthouse.json` (fictional names; a
+  real pack is itself sensitive — keep it private).
+- **pre-commit hook** — `.pre-commit-hooks.yaml` exposes `cloak-scan` for the
+  pre-commit framework; `scan` now accepts multiple files and reports per-file.
+- Source-hygiene test: no control bytes (the twice-bitten NUL-separator bug class) may
+  appear anywhere under `src/`.
+
+### Added (earlier this cycle)
 - **`cloak` CLI** — `sanitize`, `restore`, `scan`, and `inspect` over the core engine.
   Zero runtime dependencies; the mapping is only ever persisted as an AES-256-GCM
   encrypted `.cloak` bridge; passphrase via `$CLOAK_PASS` or a hidden TTY prompt.

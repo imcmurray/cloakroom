@@ -1,0 +1,23 @@
+# Cloakroom as a pre-commit gate: block commits that contain PII/secrets.
+#
+# Usage in a consuming repo's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/imcmurray/cloakroom
+#       rev: v0.2.0
+#       hooks:
+#         - id: cloak-scan
+#           # optional org dictionary:
+#           # args: [--pack, .cloak/moss-terms.json]
+#
+# pre-commit installs this repo into an isolated node env (`npm install` runs
+# the `prepare` script, which builds the CLI), then invokes `cloak scan` with
+# the staged filenames. Exit 3 on any detected secret fails the commit and the
+# masked audit on stderr shows what was caught — originals are never printed.
+
+- id: cloak-scan
+  name: cloak scan (PII/secret gate)
+  description: Block commits containing IPs, emails, SSNs, API keys, case numbers, and other PII/secrets.
+  entry: cloak scan
+  language: node
+  types: [text]

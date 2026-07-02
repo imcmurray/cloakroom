@@ -1,0 +1,15 @@
+{
+  "name": "example-courthouse",
+  "description": "EXAMPLE term pack with FICTIONAL names — a template for a real one. A real pack is itself sensitive (it lists the names you protect): keep it in an internal share or private repo, never in a public one. Load with --pack <file> or $CLOAK_PACKS.",
+  "customTerms": [
+    { "value": "Hon. Jane Placeholder", "type": "PERSON" },
+    { "value": "Judge Placeholder", "type": "PERSON" },
+    { "value": "Pat Example-Clerk", "type": "PERSON" },
+    { "value": "Placeholder County Courthouse", "type": "ORG" },
+    { "value": "PLACEHOLDER-CMS", "type": "CUSTOM" }
+  ],
+  "whitelist": [
+    "www.uscourts.gov",
+    "pacer.uscourts.gov"
+  ]
+}
