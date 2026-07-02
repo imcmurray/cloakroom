@@ -20,7 +20,16 @@
 
 * { box-sizing: border-box; }
 
-html { background: var(--vault); }
+html {
+  background: var(--vault);
+  /* Reserve the scrollbar gutter so switching between a tall tab and a short
+     one doesn't shift the whole layout sideways when the page scrollbar
+     appears/disappears. */
+  scrollbar-gutter: stable;
+}
+@supports not (scrollbar-gutter: stable) {
+  html { overflow-y: scroll; }
+}
 #root { min-height: 100%; }
 body {
   margin: 0;
