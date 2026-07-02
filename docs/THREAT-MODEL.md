@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Browser tab (JS) | yes | yes | Trusted compute. Everything sensitive happens client-side. |
 | Web Worker | yes | yes | Same origin; isolates CPU-heavy detection from the UI thread. |
-| localStorage | yes (if user opts in) | yes | Plaintext at rest unless encrypted; off by default for mapping. |
+| localStorage (session-restore) | no | encrypted | Opt-in only. Snapshots (tabs, mappings, vocabulary) are AES-256-GCM under a user passphrase (PBKDF2 600k) before touching storage; the key lives only in memory, so every reload requires the passphrase. Plaintext metadata is limited to saved-at + tab count. Auto-expires after 7 days; one-click panic clear. |
 | `cloak` CLI process | yes | yes | Same trust position as the browser tab: local, zero runtime deps, no network. Passphrase via `$CLOAK_PASS` or hidden TTY prompt — never argv. |
 | `cloak wrap` child command | sees *sanitized* stdin+args | no | The wrapped LLM CLI gets decoys; mapping lives only in the wrap process's memory (ephemeral by default). |
 | Claude Code hooks | yes (they do the redaction) | yes | Run locally per tool call. Guard never persists anything; sanitize/restore keep the mapping in the session bridge. Fail CLOSED when misconfigured (withhold output / deny the write). |
@@ -22,7 +22,7 @@
 ## Primary threats & mitigations
 
 1. **Malicious/compromised server swaps in exfiltrating JS.** This is the hardest threat for any "client-side" web tool. Mitigations: ship as a self-hostable static bundle; publish a **Subresource Integrity** manifest and reproducible builds; offer the **PWA/offline** mode and **browser extension** (extensions are reviewed and version-pinned, dramatically shrinking this surface); strict CSP with `connect-src 'none'` (or `'self'` only) so injected code can't phone home. Document that maximum assurance = self-host or extension.
-2. **Mapping leakage at rest.** Mapping is in-memory by default; persistence is opt-in and the exportable bridge file is always encrypted. Offer "panic clear" and auto-expiry of localStorage sessions.
+2. **Mapping leakage at rest.** Mapping is in-memory by default; persistence is opt-in and always encrypted (bridge files, and the browser's session-restore — passphrase-derived key held only in memory, 7-day auto-expiry, one-click panic clear, shipped).
 3. **Wrong/partial sanitization (false negatives).** A missed secret is the worst failure. Mitigations: conservative high-recall detectors, an always-visible **audit panel** showing exactly what was replaced (masked), a manual select-to-redact tool, and a pre-copy "looks-unsanitized?" scan that warns on residual high-entropy strings.
 4. **Reversal ambiguity / cascade substitution.** Solved structurally by single-pass longest-first alternation reversal (see `engine.ts`), unique-decoy enforcement, and consistent per-value mapping.
 5. **Decoy mistaken for real data downstream.** Reserved/test ranges (RFC 5737/2606, area-900 SSN, test BIN) make decoys identifiable as non-real, reducing the chance someone acts on a fake IP/card.

@@ -7,6 +7,14 @@ versions may include breaking changes.
 ## [Unreleased]
 
 ### Added
+- **Encrypted session-restore (opt-in).** "Save session" keeps your tabs across
+  reloads: snapshots are AES-256-GCM encrypted under a passphrase (PBKDF2 600k,
+  same envelope as bridge files) before touching localStorage; the key lives only
+  in memory so every reload asks again; plaintext metadata is limited to saved-at
+  and tab count; sessions auto-expire after 7 days; "Forget & turn off" is a
+  one-click panic clear. Wrong passphrases leave the stored session untouched.
+  Core gains generic `encryptJson`/`decryptJson` (+`WithKey` variants); bridge
+  functions are now thin wrappers over the same envelope.
 - **Document tabs in the browser app.** Work on several documents at once: each
   tab is an independent workspace (original, sanitized result, mapping, AI reply,
   restored output) that survives switching untouched; your sensitive terms,

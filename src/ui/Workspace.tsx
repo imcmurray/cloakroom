@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type SyntheticEvent }
 import { useCloakroom } from './useCloakroom';
 import { decideSelectionAction, segmentizeSanitized } from './review';
 import type { CustomTerm, EntityType, MappingEntry, RestoreSegment, SanitizeResult } from '../core/types';
+import type { DocSnapshot } from './session';
 import { Pane } from './Pane';
 
 // One color per entity class — used by both the highlight marks and the legend.
@@ -53,41 +54,48 @@ export interface WorkspaceProps {
   setTerms: (v: string) => void;
   setWhitelist: (v: string) => void;
   note: (m: string) => void;
-  /** Report this document's state upward (tab label, ticket count, export). */
-  onState: (s: { label: string; mapping: MappingEntry[] }) => void;
+  /** Report this document's state upward (tab label, ticket, session save). */
+  onState: (s: { label: string; mapping: MappingEntry[]; snapshot: DocSnapshot }) => void;
   /** Initial content for a fresh tab (the sample, for the first one). */
   seedText?: string;
   /** A bridge imported from disk — this tab starts in restore-only mode. */
   seedBridge?: MappingEntry[];
+  /** A restored session snapshot — wins over seedText/seedBridge. */
+  seedSnapshot?: DocSnapshot;
 }
 
 export function Workspace({
-  active, mode, terms, whitelist, setTerms, setWhitelist, note, onState, seedText, seedBridge,
+  active, mode, terms, whitelist, setTerms, setWhitelist, note, onState, seedText, seedBridge, seedSnapshot,
 }: WorkspaceProps) {
   const { sanitize, desanitize } = useCloakroom();
 
-  const [original, setOriginal] = useState(seedText ?? '');
+  const [original, setOriginal] = useState(seedSnapshot?.original ?? seedText ?? '');
   const [result, setResult] = useState<SanitizeResult | null>(
-    seedBridge ? { sanitized: '', mapping: seedBridge, audit: [] } : null,
+    seedSnapshot ? seedSnapshot.result : seedBridge ? { sanitized: '', mapping: seedBridge, audit: [] } : null,
   );
-  const [aiResponse, setAiResponse] = useState('');
+  const [aiResponse, setAiResponse] = useState(seedSnapshot?.aiResponse ?? '');
   const [restored, setRestored] = useState('');
   const [segments, setSegments] = useState<RestoreSegment[]>([]);
   const [gaps, setGaps] = useState<MappingEntry[]>([]);
-  const [imported, setImported] = useState(Boolean(seedBridge));
-  const [outboundOpen, setOutboundOpen] = useState(!seedBridge);
-  const [inboundOpen, setInboundOpen] = useState(Boolean(seedBridge));
+  const [imported, setImported] = useState(seedSnapshot?.imported ?? Boolean(seedBridge));
+  const [outboundOpen, setOutboundOpen] = useState(seedSnapshot?.outboundOpen ?? !seedBridge);
+  const [inboundOpen, setInboundOpen] = useState(seedSnapshot?.inboundOpen ?? Boolean(seedBridge));
   const [sel, setSel] = useState<string | null>(null);
   const [selType, setSelType] = useState<EntityType>('CUSTOM');
 
   const mapping = result?.mapping ?? [];
 
-  // Lift what the shell needs: a tab label and the claim-ticket mapping.
+  // Lift what the shell needs: tab label, claim ticket, and a full snapshot
+  // for the (opt-in, encrypted) session save.
   useEffect(() => {
     const firstLine = original.split('\n').find((l) => l.trim());
-    onState({ label: firstLine ? trunc(firstLine.trim(), 16) : 'Untitled', mapping });
+    onState({
+      label: firstLine ? trunc(firstLine.trim(), 16) : 'Untitled',
+      mapping,
+      snapshot: { original, aiResponse, result, outboundOpen, inboundOpen, imported },
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [original, result]);
+  }, [original, result, aiResponse, outboundOpen, inboundOpen, imported]);
 
   const sanitizedSegs = useMemo(
     () => (result ? segmentizeSanitized(result.sanitized, result.mapping) : []),

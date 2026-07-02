@@ -4,10 +4,14 @@
 // Documents are independent: each has its own mapping (like separate bridge
 // files); the vocabulary is yours and applies to whichever tab you sanitize.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { encryptBridge, decryptBridge } from '../core/crypto';
 import { Workspace } from './Workspace';
 import type { MappingEntry } from '../core/types';
+import {
+  forgetSession, isWorthSaving, newSessionKey, peekSession, saveSession, unlockSession,
+  SESSION_TTL_DAYS, type DocSnapshot, type PeekResult, type SessionKeyPair, type SessionPayload,
+} from './session';
 
 const SAMPLE = `[2026-06-30 14:22:01] ERROR ecf: filing failed for jane.doe@example-corp.com
   client 192.168.1.100 (seen again at 192.168.1.100), gateway 10.20.30.40
@@ -20,10 +24,12 @@ interface Doc {
   id: number;
   seedText?: string;
   seedBridge?: MappingEntry[];
+  seedSnapshot?: DocSnapshot;
 }
 interface DocMeta {
   label: string;
   mapping: MappingEntry[];
+  snapshot: DocSnapshot;
 }
 
 export function App() {
@@ -39,12 +45,93 @@ export function App() {
   const [egress, setEgress] = useState<'idle' | 'testing' | 'blocked' | 'allowed'>('idle');
   const [flash, setFlash] = useState<string | null>(null);
 
+  // Encrypted session-restore (opt-in): key lives ONLY in memory; blob in
+  // localStorage is AES-256-GCM; peek deletes expired sessions on sight.
+  const [sessionKp, setSessionKp] = useState<SessionKeyPair | null>(null);
+  const [stored, setStored] = useState<PeekResult>(() => peekSession(window.localStorage));
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+
   const activeMapping = meta[activeId]?.mapping ?? [];
 
   const note = (m: string) => {
     setFlash(m);
     window.setTimeout(() => setFlash(null), 2200);
   };
+
+  function buildPayload(): SessionPayload {
+    return {
+      v: 1,
+      mode,
+      terms,
+      whitelist,
+      activeIndex: Math.max(0, docs.findIndex((d) => d.id === activeId)),
+      docs: docs.map((d) => meta[d.id]?.snapshot).filter((s): s is DocSnapshot => Boolean(s)),
+    };
+  }
+
+  // Debounced autosave whenever anything worth keeping changes.
+  useEffect(() => {
+    if (!sessionKp) return;
+    const t = window.setTimeout(async () => {
+      const payload = buildPayload();
+      if (!isWorthSaving(payload)) return;
+      try {
+        await saveSession(window.localStorage, sessionKp, payload);
+        setSavedAt(new Date().toISOString());
+      } catch {
+        note('Session save failed — storage full?');
+      }
+    }, 900);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionKp, meta, terms, whitelist, mode, docs, activeId]);
+
+  async function enableSessionSave() {
+    const pass = window.prompt(
+      `Create a passphrase for this browser's saved session.\nTabs + mappings are AES-256-GCM encrypted in localStorage; the passphrase is never stored. Sessions expire after ${SESSION_TTL_DAYS} days.`,
+    );
+    if (!pass) return;
+    const kp = await newSessionKey(pass);
+    setSessionKp(kp);
+    await saveSession(window.localStorage, kp, buildPayload());
+    setSavedAt(new Date().toISOString());
+    setStored({ state: 'none' }); // any previous banner is superseded
+    note('Session saving is on — encrypted, this browser only');
+  }
+
+  async function unlockStoredSession() {
+    const pass = window.prompt('Passphrase to unlock your saved session:');
+    if (!pass) return;
+    try {
+      const { payload, kp } = await unlockSession(window.localStorage, pass);
+      setMode(payload.mode);
+      setTerms(payload.terms);
+      setWhitelist(payload.whitelist);
+      const restoredDocs: Doc[] = payload.docs.map((snapshot) => ({ id: nextId.current++, seedSnapshot: snapshot }));
+      setDocs(restoredDocs);
+      setActiveId(restoredDocs[Math.min(payload.activeIndex, restoredDocs.length - 1)]?.id ?? restoredDocs[0].id);
+      setMeta({});
+      setSessionKp(kp);
+      setStored({ state: 'none' });
+      note(`Session restored — ${restoredDocs.length} tab${restoredDocs.length === 1 ? '' : 's'} back`);
+    } catch {
+      note('Wrong passphrase — session left untouched');
+    }
+  }
+
+  function discardStoredSession() {
+    if (!window.confirm('Delete the saved session? This cannot be undone.')) return;
+    forgetSession(window.localStorage);
+    setStored({ state: 'none' });
+    note('Saved session deleted');
+  }
+
+  function turnOffSessionSave() {
+    forgetSession(window.localStorage);
+    setSessionKp(null);
+    setSavedAt(null);
+    note('Session saving is off — stored data deleted');
+  }
 
   function addDoc(seed?: Partial<Doc>): number {
     const id = nextId.current++;
@@ -177,9 +264,49 @@ export function App() {
               </label>
             </div>
           </section>
+          <section className={`card session${sessionKp ? ' on' : ''}`}>
+            <span className="eyebrow">Session</span>
+            {sessionKp ? (
+              <>
+                <p className="hint">
+                  Autosaving <strong>encrypted</strong> to this browser
+                  {savedAt && <> · saved {new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>}.
+                  Reloading will ask for your passphrase. Expires after {SESSION_TTL_DAYS} days.
+                </p>
+                <div className="ticket-actions">
+                  <button className="ghost" onClick={turnOffSessionSave}>Forget &amp; turn off</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="hint">
+                  {stored.state === 'expired'
+                    ? `A saved session expired (>${SESSION_TTL_DAYS} days) and was deleted. `
+                    : ''}
+                  Keep your tabs across reloads? Everything is AES-256-GCM encrypted with a passphrase
+                  before it touches localStorage — nothing readable at rest, nothing leaves this machine.
+                </p>
+                <div className="ticket-actions">
+                  <button className="ghost" onClick={enableSessionSave}>Save session…</button>
+                </div>
+              </>
+            )}
+          </section>
         </aside>
 
         <div className="deck">
+          {stored.state === 'present' && !sessionKp && (
+            <div className="banner" role="status">
+              <span className="brasstag sm">{stored.tabCount}</span>
+              <div>
+                <strong>Encrypted session found</strong> — {stored.tabCount} tab{stored.tabCount === 1 ? '' : 's'}, saved{' '}
+                {new Date(stored.savedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}.
+                Unlock to bring them back, or discard to delete it.
+              </div>
+              <button className="ghost" onClick={unlockStoredSession}>Unlock…</button>
+              <button className="ghost dismiss" title="Delete the saved session" onClick={discardStoredSession}>Discard</button>
+            </div>
+          )}
           <div className="tabs" role="tablist" aria-label="Documents">
             {docs.map((d) => {
               const m = meta[d.id];
@@ -206,7 +333,7 @@ export function App() {
               mode={mode} terms={terms} whitelist={whitelist}
               setTerms={setTerms} setWhitelist={setWhitelist} note={note}
               onState={(s) => setMeta((m) => ({ ...m, [d.id]: s }))}
-              seedText={d.seedText} seedBridge={d.seedBridge} />
+              seedText={d.seedText} seedBridge={d.seedBridge} seedSnapshot={d.seedSnapshot} />
           ))}
         </div>
       </main>

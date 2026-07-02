@@ -67,18 +67,16 @@ export function readBridgeSalt(blob: string): Uint8Array {
   return b64decode(JSON.parse(blob).salt as string);
 }
 
-/** Encrypt a mapping with an already-derived key; `salt` is embedded so a
- *  passphrase-only reader can still re-derive and decrypt the same blob. */
-export async function encryptBridgeWithKey(
-  mapping: MappingEntry[],
-  key: CryptoKey,
-  salt: Uint8Array,
-  mode: 'realistic' | 'token' = 'realistic',
-): Promise<string> {
+/**
+ * Encrypt ANY JSON-serializable value with an already-derived key into the
+ * standard Cloakroom envelope ({v, kdf, salt, iv, ct}); `salt` is embedded so
+ * a passphrase-only reader can re-derive and decrypt the same blob. Bridge
+ * files and the browser's encrypted session-restore both ride this.
+ */
+export async function encryptJsonWithKey(value: unknown, key: CryptoKey, salt: Uint8Array): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const payload: BridgeFile = { v: 1, createdAt: new Date().toISOString(), mode, mapping };
   const ct = new Uint8Array(
-    await crypto.subtle.encrypt({ name: 'AES-GCM', iv: ab(iv) }, key, ab(enc.encode(JSON.stringify(payload)))),
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv: ab(iv) }, key, ab(enc.encode(JSON.stringify(value)))),
   );
   return JSON.stringify({
     v: 1,
@@ -89,13 +87,42 @@ export async function encryptBridgeWithKey(
   });
 }
 
-/** Decrypt with an already-derived key. Throws on GCM auth fail (wrong key / tamper). */
-export async function decryptBridgeWithKey(blob: string, key: CryptoKey): Promise<BridgeFile> {
+/** Decrypt an envelope with an already-derived key. Throws on GCM auth fail (wrong key / tamper). */
+export async function decryptJsonWithKey<T = unknown>(blob: string, key: CryptoKey): Promise<T> {
   const parsed = JSON.parse(blob);
   const iv = b64decode(parsed.iv);
   const ct = b64decode(parsed.ct);
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ab(iv) }, key, ab(ct));
-  return JSON.parse(dec.decode(pt)) as BridgeFile;
+  return JSON.parse(dec.decode(pt)) as T;
+}
+
+/** Passphrase convenience over encryptJsonWithKey (fresh salt per blob). */
+export async function encryptJson(value: unknown, passphrase: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await deriveBridgeKey(passphrase, salt);
+  return encryptJsonWithKey(value, key, salt);
+}
+
+/** Passphrase convenience over decryptJsonWithKey. */
+export async function decryptJson<T = unknown>(blob: string, passphrase: string): Promise<T> {
+  const key = await deriveBridgeKey(passphrase, readBridgeSalt(blob));
+  return decryptJsonWithKey<T>(blob, key);
+}
+
+/** Encrypt a mapping with an already-derived key (bridge-file payload shape). */
+export async function encryptBridgeWithKey(
+  mapping: MappingEntry[],
+  key: CryptoKey,
+  salt: Uint8Array,
+  mode: 'realistic' | 'token' = 'realistic',
+): Promise<string> {
+  const payload: BridgeFile = { v: 1, createdAt: new Date().toISOString(), mode, mapping };
+  return encryptJsonWithKey(payload, key, salt);
+}
+
+/** Decrypt with an already-derived key. Throws on GCM auth fail (wrong key / tamper). */
+export async function decryptBridgeWithKey(blob: string, key: CryptoKey): Promise<BridgeFile> {
+  return decryptJsonWithKey<BridgeFile>(blob, key);
 }
 
 /** Encrypt a mapping into a portable, password-protected string. */

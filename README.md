@@ -39,8 +39,10 @@ version into any LLM, paste the reply back, and collect your real data. Every de
 tinted by type so leftovers stand out; **select anything the detectors missed to cloak
 it everywhere, click any decoy to un-cloak a false positive** — each refinement re-runs
 the engine so the mapping stays complete and reversible. Work several documents at once
-in tabs, each with its own independent mapping. Runs entirely client-side (works fully
-offline as a PWA); nothing you paste is sent anywhere.
+in tabs, each with its own independent mapping — and optionally keep them across reloads
+with an encrypted saved session (passphrase-protected, 7-day expiry, one-click forget).
+Runs entirely client-side (works fully offline as a PWA); nothing you paste is sent
+anywhere.
 
 ![Cloakroom browser app — real data is swapped for reserved-range decoys on the way out, then restored (with color-coded highlights) on the way back](./docs/screenshot.png)
 
