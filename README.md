@@ -191,6 +191,8 @@ skipped.
 
 ### Pre-commit gate
 
+![Animated terminal demo: a git commit carrying PII fails the cloak-scan gate with a masked audit (originals shown as blocks, never printed); after scrubbing the file the same commit passes.](docs/scan-demo.svg)
+
 Block commits containing PII/secrets with one stanza in a repo's
 `.pre-commit-config.yaml` (uses the [pre-commit](https://pre-commit.com) framework):
 
