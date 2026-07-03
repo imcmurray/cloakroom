@@ -1,8 +1,15 @@
 {
-  "name": "cloakroom",
-  "version": "0.2.0",
-  "private": true,
-  "description": "Client-side sanitize/restore bridge for pasting sensitive data into public LLMs.",
+  "name": "@imcmurray/cloakroom",
+  "version": "0.3.0",
+  "description": "Check your secrets at the door: swap PII/secrets for reserved-range decoys before any LLM sees them, restore them in the reply. CLI (`cloak`), wrap-any-command mode, pre-commit gate, Claude Code hooks.",
+  "keywords": ["privacy", "pii", "redaction", "sanitize", "llm", "secrets", "pre-commit", "claude-code", "data-protection"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imcmurray/cloakroom.git"
+  },
+  "homepage": "https://github.com/imcmurray/cloakroom#readme",
+  "bugs": "https://github.com/imcmurray/cloakroom/issues",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -10,11 +17,20 @@
   "bin": {
     "cloak": "dist-cli/cloak.mjs"
   },
+  "files": [
+    "dist-cli/",
+    "integrations/",
+    ".pre-commit-hooks.yaml",
+    "docs/CLI-EXAMPLE.md",
+    "docs/CLAUDE-CODE.md",
+    "docs/THREAT-MODEL.md"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "build:cli": "node scripts/build-cli.mjs",
     "prepare": "node scripts/build-cli.mjs",
+    "prepublishOnly": "npm run typecheck && npm test && node scripts/build-cli.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

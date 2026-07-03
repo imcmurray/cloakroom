@@ -4,9 +4,14 @@ All notable changes to Cloakroom are noted here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project is pre-1.0, so minor
 versions may include breaking changes.
 
-## [Unreleased]
+## [0.3.0] — 2026-07-02
 
 ### Added
+- **Published to npm as [`@imcmurray/cloakroom`](https://www.npmjs.com/package/@imcmurray/cloakroom)**
+  (`npm install -g @imcmurray/cloakroom` → the `cloak` command). Every release is
+  published from CI with **SLSA provenance** (`npm publish --provenance`) — verify
+  installed versions with `npm audit signatures`. The tarball ships the built CLI,
+  the Claude Code hook profiles, the example term pack, and the key docs.
 - **Encrypted session-restore (opt-in).** "Save session" keeps your tabs across
   reloads: snapshots are AES-256-GCM encrypted under a passphrase (PBKDF2 600k,
   same envelope as bridge files) before touching localStorage; the key lives only

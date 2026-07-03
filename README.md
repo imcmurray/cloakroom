@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/imcmurray/cloakroom/actions/workflows/ci.yml/badge.svg)](https://github.com/imcmurray/cloakroom/actions/workflows/ci.yml)
 [![Deploy](https://github.com/imcmurray/cloakroom/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/imcmurray/cloakroom/actions/workflows/deploy-pages.yml)
+[![npm](https://img.shields.io/npm/v/%40imcmurray%2Fcloakroom?label=npm)](https://www.npmjs.com/package/@imcmurray/cloakroom)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 > **Check your secrets at the door. Get them back on the way out.**
@@ -48,6 +49,13 @@ anywhere.
 
 ### 2 · On the command line — `cloak wrap`
 
+```bash
+npm install -g @imcmurray/cloakroom     # → the `cloak` command (Node ≥20)
+```
+
+Every npm release is published from CI with **SLSA provenance** — verify what you
+installed with `npm audit signatures`.
+
 Run **any** command inside the cloak: stdin and arguments are sanitized on the way in,
 stdout is restored on the way out. The mapping lives and dies in process memory — no
 setup, no bridge file, no passphrase.
@@ -83,7 +91,7 @@ masked audit shows what was caught without ever printing an original:
 ```yaml
 repos:
   - repo: https://github.com/imcmurray/cloakroom
-    rev: v0.2.0
+    rev: v0.3.0
     hooks:
       - id: cloak-scan
 ```

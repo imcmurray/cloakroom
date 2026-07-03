@@ -1,0 +1,42 @@
+name: Release to npm
+
+# Publishes @imcmurray/cloakroom with SLSA provenance on every version tag.
+# Provenance requires CI + OIDC (it cannot be produced from a laptop), which is
+# the point: every published tarball is verifiably built from this repo by this
+# workflow. Verify any installed version with:
+#   npm audit signatures
+#
+# One-time setup: create a granular npm access token (Read and write, scoped to
+# the @imcmurray/cloakroom package) and store it as the NPM_TOKEN repo secret.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC — required for --provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      # prepublishOnly runs typecheck + tests + a fresh CLI build again at
+      # publish time; this early run fails fast before touching the registry.
+      - run: npm run typecheck && npm test && npm run build:cli
+      - name: Guard - tag matches package.json version
+        if: github.ref_type == 'tag'
+        run: |
+          PKG="v$(node -p "require('./package.json').version")"
+          [ "$PKG" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != package.json $PKG"; exit 1; }
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

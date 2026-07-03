@@ -157,7 +157,7 @@ the staged filenames; `scan` accepts many files and reports per-file):
 ```yaml
 repos:
   - repo: https://github.com/imcmurray/cloakroom
-    rev: v0.2.0
+    rev: v0.3.0
     hooks:
       - id: cloak-scan
         # args: [--pack, .cloak/org-terms.json]   # optional org dictionary
