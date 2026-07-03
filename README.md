@@ -193,13 +193,18 @@ grep rule, mapping-is-the-secret): [`CONTRIBUTING.md`](CONTRIBUTING.md). Changes
 
 ## Status
 
-**v0.2.0.** Shipped: browser app (PWA/offline, CSP-verified, attested builds), the
-`cloak` CLI with `wrap`, encrypted bridge files, term packs, the pre-commit gate, and
+**v0.3.0** ([on npm](https://www.npmjs.com/package/@imcmurray/cloakroom) with SLSA
+provenance). Shipped: browser app (PWA/offline, CSP-verified, attested builds) with
+review-and-refine, document tabs, encrypted session-restore, and term-pack import/export;
+the `cloak` CLI with `wrap`, encrypted bridge files, term packs, the pre-commit gate; and
 Claude Code hook profiles (guard + transparent, contract verified against the Claude Code
-binary). Ahead: a browser extension for auto-sanitizing LLM textareas, opt-in local NER
-for free-text names, and structure-aware JSON/YAML handling. An MCP server was considered
-and **deliberately deferred** — a model-invoked tool can't protect data from the model
-that invokes it ([`docs/CLAUDE-CODE.md`](docs/CLAUDE-CODE.md) explains).
+binary). Next: a **browser extension** — designed in
+[`docs/BROWSER-EXTENSION.md`](docs/BROWSER-EXTENSION.md), development intentionally parked —
+which also becomes the maximum-assurance channel (store-reviewed, version-pinned code
+removes the "hostile host serves tampered JS" risk a web app can't). Also ahead: opt-in
+local NER for free-text names and structure-aware JSON/YAML handling. An MCP server was
+considered and **deliberately deferred** — a model-invoked tool can't protect data from
+the model that invokes it ([`docs/CLAUDE-CODE.md`](docs/CLAUDE-CODE.md) explains).
 
 MIT licensed. For a privacy tool, auditability *is* the trust story — everything here is
 open so anyone can verify that nothing leaves the machine.
