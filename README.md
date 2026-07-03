@@ -113,7 +113,9 @@ trade-offs are in [`docs/CLAUDE-CODE.md`](docs/CLAUDE-CODE.md).
 
 A term pack is a JSON dictionary of your org's sensitive literals (people, org names,
 codenames → always replaced) and known-safe ones (public hostnames → never replaced),
-honored by the CLI, `wrap`, and the hooks alike:
+honored by **every surface**: the CLI, `wrap`, the hooks — and the browser app, which
+doubles as the pack *editor* (Import pack merges one into your vocabulary; select-to-cloak
+curates it as you review real documents; Export pack shares the result back to the team):
 
 ```bash
 cloak sanitize app.log --pack org-terms.json --bridge s.cloak

@@ -6,8 +6,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { encryptBridge, decryptBridge } from '../core/crypto';
-import { Workspace } from './Workspace';
-import type { MappingEntry } from '../core/types';
+import { mergePack, parseTermPack, serializeTermPack } from '../core/packs';
+import { Workspace, parseTerms } from './Workspace';
+import type { CustomTerm, MappingEntry } from '../core/types';
 import {
   forgetSession, isWorthSaving, newSessionKey, peekSession, saveSession, unlockSession,
   SESSION_TTL_DAYS, type DocSnapshot, type PeekResult, type SessionKeyPair, type SessionPayload,
@@ -133,6 +134,51 @@ export function App() {
     note('Session saving is off — stored data deleted');
   }
 
+  // ---- term packs: the browser is also the pack EDITOR --------------------
+  // Import merges a pack into the vocabulary; select-to-cloak curates it while
+  // you work; Export shares the result back to the CLI / hooks / your team.
+
+  const termsToText = (list: CustomTerm[]): string =>
+    list.map((t) => (t.type && t.type !== 'CUSTOM' ? `${t.value} | ${t.type}` : t.value)).join('\n');
+  const wlLines = (raw: string): string[] => raw.split('\n').map((s) => s.trim()).filter(Boolean);
+
+  function importPack(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const pack = parseTermPack(String(reader.result));
+        const merged = mergePack(parseTerms(terms), wlLines(whitelist), pack);
+        setTerms(termsToText(merged.terms));
+        setWhitelist(merged.whitelist.join('\n'));
+        note(
+          `Pack${pack.name ? ` “${pack.name}”` : ''} loaded — ${merged.added} new entr${merged.added === 1 ? 'y' : 'ies'}` +
+          (merged.skipped ? `, ${merged.skipped} duplicate${merged.skipped === 1 ? '' : 's'} skipped` : '') +
+          '. Re-sanitize tabs to apply.',
+        );
+      } catch (e) {
+        // Fail loudly, never partially — same rule as the CLI and hooks.
+        note(`Pack rejected: ${e instanceof Error ? e.message : 'invalid file'}`);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function exportPack() {
+    const termList = parseTerms(terms);
+    const wl = wlLines(whitelist);
+    if (!termList.length && !wl.length) return note('Nothing to export — add terms or whitelist entries first');
+    const name = window.prompt('Pack name (used as filename and in the file):', 'team-terms');
+    if (!name) return;
+    const json = serializeTermPack(name.trim(), termList, wl);
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name.trim().replace(/[^\w.-]+/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    note(`Pack exported — works with the CLI (--pack), hooks ($CLOAK_PACKS), and this page. It lists your protected names: keep it internal.`);
+  }
+
   function addDoc(seed?: Partial<Doc>): number {
     const id = nextId.current++;
     setDocs((d) => [...d, { id, ...seed }]);
@@ -240,6 +286,17 @@ export function App() {
               </p>
             </details>
             <textarea id="terms" value={terms} onChange={(e) => setTerms(e.target.value)} rows={4} />
+            <div className="ticket-actions">
+              <label className="ghost file" title="Merge a shared term pack (.json) into this list — duplicates are skipped">
+                Import pack
+                <input type="file" accept=".json,application/json" hidden
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) importPack(f); e.target.value = ''; }} />
+              </label>
+              <button className="ghost" onClick={exportPack}
+                title="Download terms + whitelist as a pack for the CLI (--pack), hooks ($CLOAK_PACKS), or your team">
+                Export pack
+              </button>
+            </div>
           </section>
           <section className="card">
             <label className="eyebrow" htmlFor="wl">Never touch (whitelist)</label>

@@ -45,8 +45,13 @@ export class CloakroomEngine {
       const allow = new Set(opts.enabledTypes);
       matches = matches.filter((m) => allow.has(m.type) || m.detector === 'custom-term');
     }
-    matches = matches.filter((m) => !whitelist.has(m.value));
+    // Whitelisted matches stay in until AFTER overlap resolution so they still
+    // WIN their span — removing them first would hand their territory to
+    // lower-confidence overlapping detectors (e.g. the boundary-less PHONE
+    // regex nibbling digits out of a whitelisted UUID). Whitelist means
+    // "detected but never replaced", not "never detected".
     matches = resolveOverlaps(matches);
+    matches = matches.filter((m) => !whitelist.has(m.value));
 
     // original -> placeholder (consistency cache, keyed by type+value)
     const fwd = new Map<string, MappingEntry>();

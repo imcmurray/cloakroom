@@ -117,6 +117,15 @@ describe('CloakroomEngine', () => {
     expect(r.sanitized).not.toContain('8.8.8.8');
   });
 
+  it('whitelisting protects the whole span from lower-confidence overlapping detectors', () => {
+    // The digit run inside a UUID is PHONE-shaped; before the fix, whitelisting
+    // the UUID removed it pre-overlap-resolution and PHONE claimed its digits.
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const r = engine.sanitize(`trace ${uuid} end`, { whitelist: [uuid] });
+    expect(r.sanitized).toContain(uuid);
+    expect(r.mapping).toHaveLength(0);
+  });
+
   it('generates Luhn-valid fake credit cards from the test BIN', () => {
     const r = engine.sanitize('card 4111 1111 1111 1111');
     const fake = r.mapping.find((m) => m.type === 'CREDIT_CARD')!.placeholder.replace(/\D/g, '');

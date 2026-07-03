@@ -4,6 +4,25 @@ All notable changes to Cloakroom are noted here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project is pre-1.0, so minor
 versions may include breaking changes.
 
+## [Unreleased]
+
+### Added
+- **Term packs in the browser app** — the web UI is now the pack editor: "Import
+  pack" merges a pack JSON into your vocabulary (exact-duplicate entries skipped,
+  malformed packs rejected loudly with the reason — never partially applied);
+  "Export pack" downloads your terms + whitelist as the same JSON every other
+  surface consumes (CLI `--pack`, hooks `$CLOAK_PACKS`). Pack parsing/validation
+  moved to core (`parseTermPack`/`serializeTermPack`/`mergePack`) so browser and
+  CLI semantics can never drift; the CLI is stricter now — a malformed entry
+  fails the pack instead of being silently skipped.
+
+### Fixed
+- **Whitelisting now protects the whole span.** Whitelisted matches previously
+  vanished before overlap resolution, handing their territory to lower-confidence
+  overlapping detectors (the boundary-less PHONE pattern could decoy digits out of
+  a whitelisted UUID). Whitelisted values now win their span and are simply never
+  replaced. Found by the term-pack E2E.
+
 ## [0.3.0] — 2026-07-02
 
 ### Added

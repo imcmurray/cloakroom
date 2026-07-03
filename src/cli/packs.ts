@@ -18,17 +18,8 @@
 //   2. --pack a.json,b.json — explicit CLI flag
 
 import { readFile } from 'node:fs/promises';
-import type { CustomTerm, EntityType } from '../core/index';
+import { parseTermPack, type CustomTerm } from '../core/index';
 import { CliError } from './io';
-
-export interface TermPack {
-  name?: string;
-  description?: string;
-  /** Literals to ALWAYS replace. Bare strings default to type CUSTOM. */
-  customTerms?: Array<string | { value: string; type?: EntityType }>;
-  /** Literals to NEVER replace (e.g. public hostnames of your own org). */
-  whitelist?: string[];
-}
 
 export interface PackOptions {
   customTerms: CustomTerm[];
@@ -47,22 +38,23 @@ export function packPaths(flagValue: string | true | undefined): string[] {
 }
 
 /** Load and merge packs. Throws CliError on unreadable/malformed packs —
- *  a silently-skipped pack would mean silently-unprotected terms. */
+ *  a silently-skipped pack would mean silently-unprotected terms. Parsing and
+ *  validation are shared with the browser app via core parseTermPack. */
 export async function loadPacks(paths: string[]): Promise<PackOptions> {
   const out: PackOptions = { customTerms: [], whitelist: [] };
   for (const p of paths) {
-    let pack: TermPack;
+    let text: string;
     try {
-      pack = JSON.parse(await readFile(p, 'utf8')) as TermPack;
+      text = await readFile(p, 'utf8');
     } catch {
-      throw new CliError(`Cannot read term pack: ${p} (missing or invalid JSON)`);
+      throw new CliError(`Cannot read term pack: ${p} (missing or unreadable)`);
     }
-    for (const t of pack.customTerms ?? []) {
-      if (typeof t === 'string') out.customTerms.push({ value: t });
-      else if (t && typeof t.value === 'string') out.customTerms.push({ value: t.value, type: t.type });
-    }
-    for (const w of pack.whitelist ?? []) {
-      if (typeof w === 'string') out.whitelist.push(w);
+    try {
+      const pack = parseTermPack(text);
+      out.customTerms.push(...pack.customTerms);
+      out.whitelist.push(...pack.whitelist);
+    } catch (e) {
+      throw new CliError(`Invalid term pack ${p}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
   return out;
