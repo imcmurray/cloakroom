@@ -16,3 +16,6 @@ dist-cli/
 *.cloak
 *.cloak.key
 .cloak/
+
+# local scratch notes (not part of the project)
+CLAUDE-FABLE-5.md
