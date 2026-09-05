@@ -6,9 +6,8 @@
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="116" fill="url(#bg)"/>
-  <rect x="34" y="34" width="444" height="444" rx="92" fill="none" stroke="#c8a24a" stroke-opacity="0.35" stroke-width="6"/>
-  <!-- Google Material Symbols "checkroom" (Apache-2.0), wght700. -->
-  <g transform="translate(64 448) scale(0.40)" fill="#c8a24a">
+  <!-- Google Material Symbols "checkroom" (Apache-2.0), wght700 for legibility at 16px. -->
+  <g transform="translate(30 481) scale(0.47)" fill="#c8a24a">
     <path d="M110-126q-26 0-45-18.5t-19-44.39q0-15.22 7-28.17Q60-230 72-239l346-248v-60q0-26.35 18.44-44.17Q454.88-609 481-609q21.19 0 35.59-14.65 14.41-14.65 14.41-35t-15-34.85Q501-708 480.5-708t-35 14.58Q431-678.83 431-658H305q0-73 51.56-124.5t124.5-51.5q72.94 0 124.44 50.99T657-659q0 53-32 94t-82 61v17l346 248q12 9 19 21.94 7 12.95 7 28.17 0 25.89-19 44.39T851-126H110Zm197-126h347L481-376 307-252Z"/>
   </g>
 </svg>

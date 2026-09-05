@@ -207,4 +207,6 @@ considered and **deliberately deferred** — a model-invoked tool can't protect 
 the model that invokes it ([`docs/CLAUDE-CODE.md`](docs/CLAUDE-CODE.md) explains).
 
 MIT licensed. For a privacy tool, auditability *is* the trust story — everything here is
-open so anyone can verify that nothing leaves the machine.
+open so anyone can verify that nothing leaves the machine. The favicon's coat-hanger glyph
+is Google's Material Symbols `checkroom`, used under Apache-2.0 and inlined locally (no
+font or CDN request).

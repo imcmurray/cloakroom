@@ -24,7 +24,7 @@ export default defineConfig(({ command }) => ({
     cspByMode(command === 'build'),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg'],
+      includeAssets: ['icon.svg', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png'],
       // Precache the whole app shell so it loads with no network at all.
       workbox: { globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'] },
       manifest: {
@@ -39,7 +39,9 @@ export default defineConfig(({ command }) => ({
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          // Separate maskable art: full-bleed, glyph inside the 80% safe circle so
+          // Android's mask can't clip the hanger.
+          { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
     }),
