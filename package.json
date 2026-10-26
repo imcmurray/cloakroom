@@ -1,6 +1,6 @@
 {
   "name": "@imcmurray/cloakroom",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Check your secrets at the door: swap PII/secrets for reserved-range decoys before any LLM sees them, restore them in the reply. CLI (`cloak`), wrap-any-command mode, pre-commit gate, Claude Code hooks.",
   "keywords": [
     "privacy",

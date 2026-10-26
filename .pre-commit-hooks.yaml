@@ -4,7 +4,7 @@
 #
 #   repos:
 #     - repo: https://github.com/imcmurray/cloakroom
-#       rev: v0.4.0
+#       rev: v0.4.1
 #       hooks:
 #         - id: cloak-scan
 #           # optional org dictionary:

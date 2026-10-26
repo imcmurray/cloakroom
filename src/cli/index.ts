@@ -9,7 +9,7 @@ import { CliError, err } from './io';
 import { cmdHook, cmdInspect, cmdRestore, cmdSanitize, cmdScan } from './commands';
 import { cmdWrap } from './wrap';
 
-const VERSION = '0.4.0';
+const VERSION = '0.4.1';
 
 const HELP = `cloak — check your secrets at the door, get them back on the way out.
 

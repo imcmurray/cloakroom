@@ -6,7 +6,12 @@ versions may include breaking changes.
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-10-26
+
 ### Security
+Advisory: GHSA-gx33-3r5r-jxqh. Upgrade if your transparent profile restores into
+`Bash`.
+
 - **Restoring real values into shell commands now needs your approval.** With
   `|Bash` added to the transparent profile's restore matcher, the hook silently
   swapped decoys back to real values in any command, including one that sends
