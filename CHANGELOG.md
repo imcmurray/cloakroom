@@ -6,6 +6,21 @@ versions may include breaking changes.
 
 ## [Unreleased]
 
+### Security
+- **Restoring real values into shell commands now needs your approval.** With
+  `|Bash` added to the transparent profile's restore matcher, the hook silently
+  swapped decoys back to real values in any command, including one that sends
+  them off the machine (a prompt-injected `curl …?k=<decoy>`). A restored
+  command now returns `permissionDecision: "ask"`, which also holds under
+  bypass permissions; headless `-p` runs block it. Calls with no decoys are no
+  longer touched at all.
+- **The guard no longer fails open.** Internal errors used to allow the read
+  or pass the output through; they now deny / withhold. A malformed hook event,
+  or any error escaping a hook mode, exits 2 (Claude Code's blocking error)
+  instead of 0/1, which let the call proceed.
+- **MCP tools are covered.** Both hook profiles now match `mcp__.*`, so
+  database/CRM MCP results are withheld (guard) or decoyed (transparent).
+
 ## [0.4.0] — 2026-10-26
 
 ### Added

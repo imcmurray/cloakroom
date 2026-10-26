@@ -1,6 +1,6 @@
 {
   "//": "Cloakroom TRANSPARENT profile for Claude Code. The 'magic' mode.",
-  "//1": "PostToolUse sanitizes Read/Bash/Grep output into decoys BEFORE the model sees it;",
+  "//1": "PostToolUse sanitizes Read/Bash/Grep/MCP-tool output into decoys BEFORE the model sees it;",
   "//2": "PreToolUse restores real values before a Write/Edit hits disk.",
   "//3": "Do NOT combine with the guard profile (guard would deny the read the sanitizer wants).",
   "//4": "Requires env in the shell that launches Claude Code:",
@@ -11,13 +11,13 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Read|Bash|Grep",
+        "matcher": "Read|Bash|Grep|mcp__.*",
         "hooks": [{ "type": "command", "command": "cloak hook sanitize" }]
       }
     ],
     "PreToolUse": [
       {
-        "//": "Add |Bash to also restore decoys inside shell commands (e.g. ssh to a decoyed IP).",
+        "//": "Add |Bash to also restore decoys inside shell commands (e.g. ssh to a decoyed IP). A restored command always asks for your approval, even in bypass mode, because a command can send the real values somewhere; in headless (-p) runs it is blocked.",
         "matcher": "Write|Edit",
         "hooks": [{ "type": "command", "command": "cloak hook restore" }]
       }

