@@ -9,7 +9,12 @@ name: Release to npm
 # Auth is npm trusted publishing: npm verifies this workflow's OIDC identity,
 # so there is no long-lived token to expire or leak. Configured on npmjs.com
 # (package settings > Trusted Publisher: imcmurray/cloakroom, release.yml,
-# "Allow npm publish" only). Needs npm >= 11.5.1, which Node 24 ships.
+# "Allow npm publish" only, environment npm-release). Needs npm >= 11.5.1,
+# checked below. Hardening: publish runs only in the npm-release environment
+# (manual approval, v* tags only), and v* tags can only be created by repo
+# admins (tag ruleset). No npm cache here: a publishing job builds from a
+# clean download, and there is no registry-url, so npm can't fall back to a
+# placeholder token and hide an OIDC failure behind a misleading E404.
 
 on:
   push:
@@ -18,25 +23,30 @@ on:
 
 permissions:
   contents: read
-  id-token: write # OIDC — trusted publishing and --provenance
+  id-token: write # OIDC — trusted publishing (which also attaches provenance)
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: npm-release
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
-          registry-url: https://registry.npmjs.org
+      - name: Guard - npm supports trusted publishing
+        run: |
+          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm --version)" \
+            || { echo "npm $(npm --version) < 11.5.1: no trusted publishing"; exit 1; }
       - run: npm ci
       # prepublishOnly runs typecheck + tests + a fresh CLI build again at
       # publish time; this early run fails fast before touching the registry.
       - run: npm run typecheck && npm test && npm run build:cli
+      # Also runs on manual dispatch, so a dispatch from a branch fails here
+      # instead of publishing an untagged build.
       - name: Guard - tag matches package.json version
-        if: github.ref_type == 'tag'
         run: |
+          [ "$GITHUB_REF_TYPE" = tag ] || { echo "not a tag: $GITHUB_REF_NAME"; exit 1; }
           PKG="v$(node -p "require('./package.json').version")"
           [ "$PKG" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != package.json $PKG"; exit 1; }
       - run: npm publish --provenance --access public
