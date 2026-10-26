@@ -6,6 +6,12 @@ versions may include breaking changes.
 
 ## [Unreleased]
 
+### Security
+- **GitHub Actions are pinned to commit SHAs** in all workflows, with the
+  release tag kept as a trailing comment. A moved or compromised tag can no
+  longer change what runs in the release job, which publishes to npm.
+  Dependabot (`.github/dependabot.yml`) proposes weekly grouped bumps.
+
 ## [0.4.2] — 2026-10-26
 
 ### Security
