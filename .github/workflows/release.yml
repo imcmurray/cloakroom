@@ -6,8 +6,10 @@ name: Release to npm
 # workflow. Verify any installed version with:
 #   npm audit signatures
 #
-# One-time setup: create a granular npm access token (Read and write, scoped to
-# the @imcmurray/cloakroom package) and store it as the NPM_TOKEN repo secret.
+# Auth is npm trusted publishing: npm verifies this workflow's OIDC identity,
+# so there is no long-lived token to expire or leak. Configured on npmjs.com
+# (package settings > Trusted Publisher: imcmurray/cloakroom, release.yml,
+# "Allow npm publish" only). Needs npm >= 11.5.1, which Node 24 ships.
 
 on:
   push:
@@ -16,7 +18,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # OIDC — required for --provenance
+  id-token: write # OIDC — trusted publishing and --provenance
 
 jobs:
   publish:
@@ -38,5 +40,3 @@ jobs:
           PKG="v$(node -p "require('./package.json').version")"
           [ "$PKG" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != package.json $PKG"; exit 1; }
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
