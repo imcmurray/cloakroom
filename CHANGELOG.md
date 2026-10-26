@@ -6,7 +6,11 @@ versions may include breaking changes.
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-10-26
+
 ### Security
+Follow-up hardening for GHSA-4334-p9gq-hpqf.
+
 - **Hooks enforce their own time limit.** Claude Code lets a tool call through
   when a hook exceeds its `timeout` (the Read happens, the raw output reaches
   the model), so a slow enough hook failed open. `cloak hook` now runs its work

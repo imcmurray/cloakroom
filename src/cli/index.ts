@@ -10,7 +10,7 @@ import { isMainThread, workerData } from 'node:worker_threads';
 import { cmdHook, cmdInspect, cmdRestore, cmdSanitize, cmdScan, runHookWorker } from './commands';
 import { cmdWrap } from './wrap';
 
-const VERSION = '0.4.1';
+const VERSION = '0.4.2';
 
 const HELP = `cloak — check your secrets at the door, get them back on the way out.
 
