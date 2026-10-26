@@ -16,7 +16,7 @@
 // the whole .cloak/ dir) when the session ends.
 
 import { existsSync } from 'node:fs';
-import { readFile, writeFile, unlink } from 'node:fs/promises';
+import { readFile, unlink } from 'node:fs/promises';
 import {
   decryptBridgeWithKey,
   deriveBridgeKey,
@@ -26,6 +26,7 @@ import {
   readBridgeSalt,
   type MappingEntry,
 } from '../core/index';
+import { writeFileAtomic } from './io';
 
 export interface SessionCrypto {
   key: CryptoKey;
@@ -40,10 +41,9 @@ async function deriveAndCache(bridgePath: string, pass: string): Promise<Session
     ? readBridgeSalt(await readFile(bridgePath, 'utf8'))
     : crypto.getRandomValues(new Uint8Array(16));
   const key = await deriveBridgeKey(pass, salt, true);
-  await writeFile(
+  await writeFileAtomic(
     cachePathFor(bridgePath),
     JSON.stringify({ v: 1, salt: Buffer.from(salt).toString('base64'), key: await exportBridgeKey(key) }),
-    { encoding: 'utf8', mode: 0o600 },
   );
   return { key, salt };
 }
@@ -90,5 +90,5 @@ export async function saveSessionMapping(
   mapping: MappingEntry[],
 ): Promise<void> {
   const blob = await encryptBridgeWithKey(mapping, sc.key, sc.salt, 'realistic');
-  await writeFile(bridgePath, blob, { encoding: 'utf8', mode: 0o600 });
+  await writeFileAtomic(bridgePath, blob);
 }

@@ -2,7 +2,8 @@
 // bridge-file read/write. Deliberately Node-only — kept out of src/core so the
 // core stays environment-agnostic.
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rename, writeFile } from 'node:fs/promises';
+import { threadId } from 'node:worker_threads';
 import { createInterface } from 'node:readline';
 
 /** Read all of stdin as UTF-8. */
@@ -67,9 +68,21 @@ export async function readBridge(path: string): Promise<string> {
   }
 }
 
+/**
+ * Write a 0600 file via a temp file + rename. A hook worker terminated at its
+ * deadline mid-write must never leave a truncated session bridge (every later
+ * hook would then fail closed and the mapping would be lost), and rename also
+ * gives an existing file 0600 — writeFile's mode only applies on creation.
+ */
+export async function writeFileAtomic(path: string, data: string): Promise<void> {
+  const tmp = `${path}.${process.pid}-${threadId}.tmp`;
+  await writeFile(tmp, data, { encoding: 'utf8', mode: 0o600 });
+  await rename(tmp, path);
+}
+
 /** Write a bridge file's encrypted blob to disk. */
 export async function writeBridge(path: string, blob: string): Promise<void> {
-  await writeFile(path, blob, { encoding: 'utf8', mode: 0o600 });
+  await writeFileAtomic(path, blob);
 }
 
 /** A user-facing error whose message is printed without a stack trace. */

@@ -15,6 +15,7 @@ import {
 import { loadSessionMapping, saveSessionMapping } from './session';
 import { loadPacks, packPaths, type PackOptions } from './packs';
 import { existsSync } from 'node:fs';
+import { Worker, parentPort } from 'node:worker_threads';
 import { readFile } from 'node:fs/promises';
 import { listFlag, numberFlag, type ParsedArgs } from './args';
 import {
@@ -302,8 +303,99 @@ function transformResponseText(
 /** A hook response object to serialize to stdout, or null for a no-op. */
 type HookResponse = Record<string, unknown> | null;
 
+const HOOK_MODES = ['guard', 'sanitize', 'restore'] as const;
+type HookMode = (typeof HOOK_MODES)[number];
+
+/** What a hook worker runs: everything it needs, structured-clone safe. */
+export interface HookJob {
+  mode: HookMode;
+  evt: HookEvent;
+  packFlag?: string | true;
+}
+
+/** Seconds a hook may work before it gives up and fails closed. */
+const DEFAULT_DEADLINE_S = 20;
+const TIMED_OUT = Symbol('timed out');
+
+export async function runHookMode(job: HookJob): Promise<HookResponse> {
+  switch (job.mode) {
+    case 'guard':
+      return hookGuard(job.evt, job.packFlag);
+    case 'sanitize':
+      return hookSanitize(job.evt, job.packFlag);
+    case 'restore':
+      return hookRestore(job.evt);
+  }
+}
+
+/**
+ * The fail-closed response for any hook mode that couldn't finish: withhold
+ * the text of a PostToolUse output, deny a PreToolUse call.
+ */
+export function hookFailClosed(evt: HookEvent, why: string): HookResponse {
+  const resp = evt.tool_response ?? evt.tool_result;
+  if (evt.hook_event_name !== 'PreToolUse' && resp !== undefined && resp !== null) {
+    const msg = `[cloak: output withheld from context — ${why}]`;
+    const { updated, found } = transformResponseText(resp, (s) => (s ? msg : s));
+    if (!found) return null; // nothing text-bearing (e.g. an image read) → nothing to leak
+    return { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } };
+  }
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: `Cloakroom: ${why}. Blocked rather than let it through unchecked.`,
+    },
+  };
+}
+
+/**
+ * Run a hook job under a deadline. The engine's work is synchronous, so a
+ * timer on the same thread could never interrupt it: the job runs in a worker
+ * thread (the bundled CLI re-loading itself) that is terminated when the
+ * deadline passes. Without this, a slow hook ran into Claude Code's own
+ * timeout, and Claude Code lets the call through when a hook times out —
+ * verified on 2.1.310 for both PreToolUse (the Read happened) and PostToolUse
+ * (the raw output reached the model).
+ *
+ * Under the test runner the source is TypeScript and can't be loaded as a
+ * worker, so the job runs inline there (no deadline).
+ */
+async function runWithDeadline(job: HookJob, ms: number): Promise<HookResponse | typeof TIMED_OUT> {
+  if (!import.meta.url.endsWith('.mjs')) return runHookMode(job);
+  const worker = new Worker(new URL(import.meta.url), { workerData: { cloakHookJob: job } });
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      void worker.terminate();
+      resolve(TIMED_OUT);
+    }, ms);
+    worker.once('message', (m: { response?: HookResponse; error?: string }) => {
+      clearTimeout(timer);
+      void worker.terminate();
+      if (m.error !== undefined) reject(new Error(m.error));
+      else resolve(m.response ?? null);
+    });
+    worker.once('error', (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+  });
+}
+
+/** Worker-thread side of runWithDeadline. Called by the CLI entry point. */
+export function runHookWorker(job: HookJob): void {
+  runHookMode(job).then(
+    (response) => parentPort!.postMessage({ response }),
+    (e) => parentPort!.postMessage({ error: e instanceof Error ? e.message : String(e) }),
+  );
+}
+
 export async function cmdHook(args: ParsedArgs): Promise<number> {
   const mode = args.input;
+  if (!HOOK_MODES.includes(mode as HookMode)) {
+    err(`Unknown hook mode: ${String(mode)} (expected guard|sanitize|restore)`);
+    return 2;
+  }
   let evt: HookEvent;
   try {
     evt = JSON.parse(await readStdin()) as HookEvent;
@@ -314,28 +406,16 @@ export async function cmdHook(args: ParsedArgs): Promise<number> {
     err('cloak hook: malformed hook event on stdin; blocking rather than passing it through.');
     return 2;
   }
-  const packFlag = args.flags['pack'];
+  const deadlineS = numberFlag(args.flags['deadline']) ?? DEFAULT_DEADLINE_S;
   let response: HookResponse;
   try {
-    switch (mode) {
-      case 'guard':
-        response = await hookGuard(evt, packFlag);
-        break;
-      case 'sanitize':
-        response = await hookSanitize(evt, packFlag);
-        break;
-      case 'restore':
-        response = await hookRestore(evt);
-        break;
-      default:
-        err(`Unknown hook mode: ${String(mode)} (expected guard|sanitize|restore)`);
-        return 2;
-    }
+    const r = await runWithDeadline({ mode: mode as HookMode, evt, packFlag: args.flags['pack'] }, deadlineS * 1000);
+    response = r === TIMED_OUT ? hookFailClosed(evt, `cloak hook ${mode} took longer than ${deadlineS}s`) : r;
   } catch (e) {
     // Backstop for anything the modes' own fail-closed paths didn't catch. An
     // escaped error would exit 1, which Claude Code treats as non-blocking:
     // the call proceeds and the output reaches the model.
-    err(`cloak hook ${String(mode)}: ${e instanceof Error ? e.message : String(e)}; blocking.`);
+    err(`cloak hook ${mode}: ${e instanceof Error ? e.message : String(e)}; blocking.`);
     return 2;
   }
   if (response) emit(response);
@@ -353,25 +433,6 @@ async function hookPacks(packFlag?: string | true): Promise<PackOptions> {
 /** Were packs explicitly configured (so a load failure must fail closed)? */
 function packsConfigured(packFlag?: string | true): boolean {
   return Boolean(process.env.CLOAK_PACKS) || typeof packFlag === 'string';
-}
-
-/** Fail-closed guard response: withhold PostToolUse output, deny a PreToolUse read. */
-function guardFailure(evt: HookEvent, why: string): HookResponse {
-  const resp = evt.tool_response ?? evt.tool_result;
-  if (evt.hook_event_name === 'PostToolUse' && resp !== undefined && resp !== null) {
-    const notice = `[cloak guard: ${why} — output withheld from context.]`;
-    const { updated, found } = transformResponseText(resp, (s) => (s ? notice : s));
-    return found
-      ? { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } }
-      : null;
-  }
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: `Cloakroom: ${why}, so the guard could not check this file. Read denied.`,
-    },
-  };
 }
 
 /**
@@ -402,7 +463,7 @@ export async function hookGuard(evt: HookEvent, packFlag?: string | true): Promi
   try {
     packs = await hookPacks(packFlag);
   } catch {
-    if (packsConfigured(packFlag)) return guardFailure(evt, 'term packs unreadable ($CLOAK_PACKS / --pack)');
+    if (packsConfigured(packFlag)) return hookFailClosed(evt, 'cloak guard: term packs unreadable ($CLOAK_PACKS / --pack)');
   }
   try {
     // PostToolUse branch: scan tool output, withhold if it carries real secrets.
@@ -440,7 +501,7 @@ export async function hookGuard(evt: HookEvent, packFlag?: string | true): Promi
       },
     };
   } catch {
-    return guardFailure(evt, 'the guard hit an internal error');
+    return hookFailClosed(evt, 'cloak guard hit an internal error');
   }
 }
 
@@ -457,12 +518,7 @@ export async function hookSanitize(evt: HookEvent, packFlag?: string | true): Pr
   // Fail-CLOSED contract: if this hook is wired up (the profile matched this
   // tool) but we cannot sanitize — env missing, bridge unreadable, any error —
   // we withhold the text rather than let raw secrets flow into context.
-  const withhold = (why: string): HookResponse => {
-    const msg = `[cloak: output withheld from context — ${why}]`;
-    const { updated, found } = transformResponseText(resp, (s) => (s ? msg : s));
-    if (!found) return null; // nothing text-bearing (e.g. an image read) → nothing to leak
-    return { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } };
-  };
+  const withhold = (why: string): HookResponse => hookFailClosed({ ...evt, hook_event_name: 'PostToolUse' }, why);
 
   const session = sessionBridge();
   if (!session) {

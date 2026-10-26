@@ -6,6 +6,17 @@ versions may include breaking changes.
 
 ## [Unreleased]
 
+### Security
+- **Hooks enforce their own time limit.** Claude Code lets a tool call through
+  when a hook exceeds its `timeout` (the Read happens, the raw output reaches
+  the model), so a slow enough hook failed open. `cloak hook` now runs its work
+  in a worker thread under `--deadline <seconds>` (default 20) and fails closed
+  (withhold / deny) when the deadline passes. The shipped profiles set
+  `"timeout": 30`. Costs ~30 ms per hook call.
+- **Bridge and key files are written atomically** (temp file + rename), so a
+  hook stopped mid-write can't corrupt the session bridge, and an existing file
+  is re-created 0600 instead of keeping looser permissions.
+
 ## [0.4.1] — 2026-10-26
 
 ### Security

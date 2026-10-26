@@ -6,7 +6,8 @@
 
 import { parseArgs } from './args';
 import { CliError, err } from './io';
-import { cmdHook, cmdInspect, cmdRestore, cmdSanitize, cmdScan } from './commands';
+import { isMainThread, workerData } from 'node:worker_threads';
+import { cmdHook, cmdInspect, cmdRestore, cmdSanitize, cmdScan, runHookWorker } from './commands';
 import { cmdWrap } from './wrap';
 
 const VERSION = '0.4.1';
@@ -26,6 +27,8 @@ COMMANDS
   inspect    Show the masked audit of an existing bridge file.
   hook       Claude Code hook adapter (guard|sanitize|restore); reads a hook
              event as JSON on stdin, writes a hook response on stdout.
+             --deadline <s> (default 20): past it, fail closed (withhold or
+             deny). Keep it below the hook's Claude Code timeout.
   help       Show this help. (--version prints the version.)
 
 OPTIONS
@@ -87,7 +90,10 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-main(process.argv.slice(2))
+// `cloak hook` re-loads this file as a worker thread so it can enforce a
+// deadline (see runWithDeadline); in that case run the job, not the CLI.
+if (!isMainThread && workerData?.cloakHookJob) runHookWorker(workerData.cloakHookJob);
+else main(process.argv.slice(2))
   .then((code) => process.exit(code))
   .catch((e) => {
     if (e instanceof CliError) {

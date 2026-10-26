@@ -6,20 +6,21 @@
   "//4": "Requires env in the shell that launches Claude Code:",
   "//5": "  export CLOAK_SESSION_BRIDGE=\"$PWD/.cloak/session.cloak\"",
   "//6": "  export CLOAK_PASS=\"<a session passphrase>\"",
+  "//9": "timeout 30 (seconds) sits above cloak's own 20s --deadline, so cloak fails closed first; Claude Code lets the call through when a hook times out.",
   "//7": "Best for logs/diagnostics/config. Risky for editing source files (the model",
   "//8": "reasons over decoys; a reworded decoy breaks restore — reverseGaps warns, but scope with care).",
   "hooks": {
     "PostToolUse": [
       {
         "matcher": "Read|Bash|Grep|mcp__.*",
-        "hooks": [{ "type": "command", "command": "cloak hook sanitize" }]
+        "hooks": [{ "type": "command", "command": "cloak hook sanitize", "timeout": 30 }]
       }
     ],
     "PreToolUse": [
       {
         "//": "Add |Bash to also restore decoys inside shell commands (e.g. ssh to a decoyed IP). A restored command always asks for your approval, even in bypass mode, because a command can send the real values somewhere; in headless (-p) runs it is blocked.",
         "matcher": "Write|Edit",
-        "hooks": [{ "type": "command", "command": "cloak hook restore" }]
+        "hooks": [{ "type": "command", "command": "cloak hook restore", "timeout": 30 }]
       }
     ]
   }

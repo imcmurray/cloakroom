@@ -4,18 +4,19 @@
   "//2": "PostToolUse: withholds Bash/Grep/MCP-tool output that carries secrets (closes the `cat secrets.txt` bypass).",
   "//3": "Already-sanitized text (Cloakroom's reserved-range decoys) does NOT trip the guard.",
   "//4": "Copy the `hooks` block into .claude/settings.json (project) or ~/.claude/settings.json (global).",
+  "//6": "timeout 30 (seconds) sits above cloak's own 20s --deadline, so cloak fails closed first; Claude Code lets the call through when a hook times out.",
   "//5": "Requires `cloak` on PATH (npm link) or replace with an absolute path to dist-cli/cloak.mjs.",
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Read",
-        "hooks": [{ "type": "command", "command": "cloak hook guard" }]
+        "hooks": [{ "type": "command", "command": "cloak hook guard", "timeout": 30 }]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Bash|Grep|mcp__.*",
-        "hooks": [{ "type": "command", "command": "cloak hook guard" }]
+        "hooks": [{ "type": "command", "command": "cloak hook guard", "timeout": 30 }]
       }
     ]
   }

@@ -136,6 +136,16 @@ Every mode exits **2** (Claude Code's blocking error) on a malformed event or an
 that escapes its own fail-closed path. Exit 1 would be non-blocking: the call would
 proceed and the output would reach the model.
 
+**Time limit.** Claude Code kills a hook that runs past its `timeout` and then lets the
+call through: the Read happens, the raw output reaches the model (verified on v2.1.310).
+So `cloak hook` enforces its own deadline, `--deadline <seconds>` (default 20). The work
+runs in a worker thread; when the deadline passes the worker is terminated and the hook
+fails closed (withhold / deny) while there is still time to answer. Keep the deadline
+comfortably below the hook's `timeout` — the shipped profiles set `"timeout": 30`.
+Session-bridge writes are atomic (temp file + rename), so a worker stopped mid-write
+can't corrupt the bridge. The worker costs ~30 ms per call; for scale, checking a 6.8 MB
+output takes ~8 s.
+
 Contract details worth knowing (verified against the Claude Code binary, v2.1.198; the
 `ask` and MCP behavior re-verified end-to-end on v2.1.310):
 the PostToolUse payload field is **`tool_response`** (`tool_result` is accepted as a
