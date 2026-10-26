@@ -11,6 +11,8 @@ export type EntityType =
   | 'CREDIT_CARD'
   | 'API_KEY'
   | 'AWS_KEY'
+  | 'SECRET'
+  | 'PRIVATE_KEY'
   | 'JWT'
   | 'UUID'
   | 'HASH'

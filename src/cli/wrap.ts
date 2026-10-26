@@ -20,8 +20,9 @@ import type { ParsedArgs } from './args';
 import { buildOptions } from './commands';
 import { CliError, err, readBridge, readStdin, resolvePassphrase, writeBridge } from './io';
 
-/** Line-buffered restore: placeholders never contain newlines, so restoring
- *  per-line is lossless AND preserves streaming output from the child. */
+/** Line-buffered restore: preserves streaming output from the child. Lossless
+ *  for every placeholder except PRIVATE_KEY decoys, which keep the key block's
+ *  line structure — an echoed key block comes back as the decoy, not the key. */
 export function makeLineRestorer(
   mapping: () => MappingEntry[],
   write: (s: string) => void,

@@ -10,6 +10,8 @@ interface DetectorDef {
   re: RegExp; // MUST be global
   confidence: number;
   validate?: (m: string) => boolean;
+  /** Replace only this capture group (needs the `d` flag), e.g. the value in `password=…`. */
+  group?: number;
 }
 
 function luhnValid(value: string): boolean {
@@ -48,6 +50,9 @@ function IPV6_RE(): RegExp {
   return new RegExp(`(?<![\\w:])(?:${body})(?![\\w:])`, 'g');
 }
 
+// Key names that introduce a secret value in `key: value` / `key=value` text.
+const SECRET_KEY = '(?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credentials?)';
+
 // Order matters only for readability; confidence drives conflict resolution.
 const DETECTORS: DetectorDef[] = [
   { type: 'AWS_KEY', name: 'aws-access-key', confidence: 0.99, re: /\bAKIA[0-9A-Z]{16}\b/g },
@@ -61,6 +66,40 @@ const DETECTORS: DetectorDef[] = [
   { type: 'CASE_NAME', name: 'caption-inre', confidence: 0.75, re: /\bIn re:? [A-Z][A-Za-z.'&-]+(?: [A-Z][A-Za-z.'&-]+){0,3}\b/g },
   { type: 'JWT', name: 'jwt', confidence: 0.97, re: /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g },
   { type: 'API_KEY', name: 'prefixed-secret', confidence: 0.95, re: /\b(?:sk|pk|rk|sk-live|sk-test|ghp|gho|ghu|ghs|ghr|xox[baprs])[-_][A-Za-z0-9]{16,}\b/g },
+  // Vendor tokens whose bodies carry their own - / _ separators, which the
+  // pattern above can't span (it missed every one of these).
+  { type: 'API_KEY', name: 'anthropic-openai-key', confidence: 0.97, re: /\bsk-(?:ant|proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/g },
+  { type: 'API_KEY', name: 'stripe-key', confidence: 0.97, re: /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,}\b/g },
+  { type: 'API_KEY', name: 'github-pat', confidence: 0.97, re: /\bgithub_pat_[A-Za-z0-9_]{22,}\b/g },
+  { type: 'API_KEY', name: 'gitlab-pat', confidence: 0.97, re: /\bglpat-[A-Za-z0-9_-]{20,}/g },
+  { type: 'API_KEY', name: 'npm-token', confidence: 0.97, re: /\bnpm_[A-Za-z0-9]{36}\b/g },
+  { type: 'API_KEY', name: 'google-api-key', confidence: 0.97, re: /\bAIza[0-9A-Za-z_-]{35}(?![\w-])/g },
+  { type: 'PRIVATE_KEY', name: 'pem-private-key', confidence: 0.99, re: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g },
+  // `password=…`, `"client_secret": "…"`, `DB_PASSWORD: …`, `aws_secret_access_key = …`.
+  // Only the VALUE is replaced, so the key name stays readable for the model.
+  // Quoted values may hold any character; unquoted ones skip what is plainly
+  // code (`token: string`, `pass = prompt(…)`, `$VAR` / `${VAR}` / `process.env.X`) so
+  // the guard doesn't deny every source file that declares a `token` field.
+  {
+    type: 'SECRET',
+    name: 'secret-assignment-quoted',
+    confidence: 0.85,
+    group: 2,
+    re: new RegExp(`${SECRET_KEY}["']?\\s*[:=]\\s*(["'\`])(?!\\$\\{)([^"'\`\\n«»]{6,})\\1`, 'gid'),
+  },
+  {
+    type: 'SECRET',
+    name: 'secret-assignment',
+    confidence: 0.85,
+    group: 1,
+    re: new RegExp(
+      `${SECRET_KEY}["']?\\s*[:=]\\s*(?![$"'\`]|process\\.env\\b|(?:string|number|boolean|undefined|null|unknown|true|false|any|never|void)\\b)([^\\s"'\`,;«»(){}<>\\[\\]]{6,})(?![\\w.(])`,
+      'gid',
+    ),
+  },
+  // Password in URI userinfo: postgres://user:PASSWORD@host. Outranks EMAIL,
+  // which would otherwise claim `PASSWORD@host` and leave the shape garbled.
+  { type: 'SECRET', name: 'uri-password', confidence: 0.96, group: 1, re: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:([^\s@/]+)@/gid },
   { type: 'UUID', name: 'uuid', confidence: 0.9, re: /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g },
   { type: 'EMAIL', name: 'email', confidence: 0.95, re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g },
   { type: 'IPV4', name: 'ipv4', confidence: 0.9, re: /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g },
@@ -100,10 +139,11 @@ function runDetector(text: string, d: DetectorDef): RawMatch[] {
   d.re.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = d.re.exec(text)) !== null) {
-    const value = m[0];
+    const value = d.group ? m[d.group] : m[0];
+    const start = d.group ? m.indices![d.group]![0] : m.index;
     if (m.index === d.re.lastIndex) d.re.lastIndex++; // zero-width guard
     if (d.validate && !d.validate(value)) continue;
-    out.push({ type: d.type, value, start: m.index, end: m.index + value.length, confidence: d.confidence, detector: d.name });
+    out.push({ type: d.type, value, start, end: start + value.length, confidence: d.confidence, detector: d.name });
   }
   return out;
 }
@@ -148,9 +188,14 @@ export function resolveOverlaps(matches: RawMatch[]): RawMatch[] {
   const sorted = [...matches].sort(
     (a, b) => b.confidence - a.confidence || b.end - b.start - (a.end - a.start) || a.start - b.start,
   );
+  // Track claimed characters instead of testing each candidate against every
+  // match already taken: that was quadratic, and a 60k-match log took 10 s —
+  // long enough to push a Claude Code hook past its timeout.
+  const claimed = new Uint8Array(matches.reduce((max, m) => Math.max(max, m.end), 0));
   const taken: RawMatch[] = [];
   for (const m of sorted) {
-    if (taken.some((t) => m.start < t.end && t.start < m.end)) continue;
+    if (claimed.subarray(m.start, m.end).includes(1)) continue;
+    claimed.fill(1, m.start, m.end);
     taken.push(m);
   }
   return taken.sort((a, b) => a.start - b.start);

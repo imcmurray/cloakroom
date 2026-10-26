@@ -6,6 +6,8 @@ versions may include breaking changes.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-10-26
+
 ### Added
 - **Term packs in the browser app** — the web UI is now the pack editor: "Import
   pack" merges a pack JSON into your vocabulary (exact-duplicate entries skipped,
@@ -15,6 +17,25 @@ versions may include breaking changes.
   moved to core (`parseTermPack`/`serializeTermPack`/`mergePack`) so browser and
   CLI semantics can never drift; the CLI is stricter now — a malformed entry
   fails the pack instead of being silently skipped.
+
+### Security
+Advisories: GHSA-4334-p9gq-hpqf, GHSA-rm2r-4mgq-c7wm. Upgrade if you use the Claude
+Code hooks, `cloak wrap`, or `cloak scan` as a gate.
+
+- **Sanitizing could hang on ordinary input, and a hung hook lets output
+  through.** Several realistic-decoy pools are small (18 hostnames, 10 orgs,
+  144 people, 762 RFC 5737 IPs), and the uniqueness loop re-rolled forever once
+  one ran dry: 19 distinct hostnames were enough. Re-rolls are now capped, after
+  which decoys widen with a per-type counter (`acme-3.example.com`, or a
+  `«IPV4_n»` token where a counter can't stay a valid reserved value). Overlap
+  resolution and output assembly were also quadratic (a 20k-line log took
+  ~32 s) and are now linear (~1 s).
+- **Common secret formats were not detected.** Added detectors for Anthropic /
+  OpenAI (`sk-ant-`, `sk-proj-`), Stripe (`sk_live_`), GitHub fine-grained
+  (`github_pat_`), GitLab (`glpat-`), npm (`npm_`) and Google (`AIza`) keys, PEM
+  private key blocks (new `PRIVATE_KEY` type), `password=` / `"client_secret":`
+  / `aws_secret_access_key =` style assignments, and passwords in connection
+  strings (new `SECRET` type; only the value is replaced, the key name stays).
 
 ### Fixed
 - **Whitelisting now protects the whole span.** Whitelisted matches previously

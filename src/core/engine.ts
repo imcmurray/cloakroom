@@ -1,7 +1,7 @@
 // The sanitize / desanitize engine. Pure & synchronous; safe for a Web Worker.
 
 import { detectAll, resolveOverlaps } from './detectors';
-import { generateRealistic } from './generators';
+import { generateRealistic, widenDecoy } from './generators';
 import type {
   AuditItem,
   EntityType,
@@ -11,6 +11,9 @@ import type {
   SanitizeOptions,
   SanitizeResult,
 } from './types';
+
+/** Random decoy re-rolls before falling back to a counter-widened decoy. */
+const MAX_REROLLS = 64;
 
 function maskPreview(value: string): string {
   if (value.length <= 4) return value[0] + '█'.repeat(Math.max(1, value.length - 1));
@@ -85,13 +88,16 @@ export class CloakroomEngine {
       return entry;
     };
 
-    // Splice replacements right-to-left so indices stay valid.
-    let out = text;
-    const ordered = [...matches].sort((a, b) => b.start - a.start);
-    for (const m of ordered) {
-      const entry = assign(m);
-      out = out.slice(0, m.start) + entry.placeholder + out.slice(m.end);
+    // Assemble left-to-right from the untouched gaps (matches are sorted and
+    // non-overlapping). Re-slicing the whole string per match was quadratic.
+    const parts: string[] = [];
+    let last = 0;
+    for (const m of matches) {
+      parts.push(text.slice(last, m.start), assign(m).placeholder);
+      last = m.end;
     }
+    parts.push(text.slice(last));
+    const out = parts.join('');
 
     const mapping = [...fwd.values()];
     const audit: AuditItem[] = mapping.map((e) => ({
@@ -118,12 +124,20 @@ export class CloakroomEngine {
       counters.set(m.type, n);
       return `«${m.type}_${n}»`;
     }
-    // realistic: regenerate with a salt nudge until unique (collisions are rare)
+    // realistic: re-roll with a salt nudge until unique — but only a bounded
+    // number of times. Some decoy pools are small enough to exhaust (19 distinct
+    // hostnames used to do it), and an unbounded re-roll then spins forever; in
+    // a Claude Code hook that means a timeout and the raw output going through.
     let candidate = generateRealistic(m.type, m.value, seed);
-    let salt = 1;
-    while (used.has(candidate) || candidate === m.value) {
+    for (let salt = 1; salt <= MAX_REROLLS && (used.has(candidate) || candidate === m.value); salt++) {
       candidate = generateRealistic(m.type, m.value + '#' + salt, seed);
-      salt++;
+    }
+    // Pool exhausted: widen with a per-type counter, which always terminates.
+    const base = candidate;
+    while (used.has(candidate) || candidate === m.value) {
+      const n = (counters.get(m.type) ?? 0) + 1;
+      counters.set(m.type, n);
+      candidate = widenDecoy(m.type, base, n);
     }
     return candidate;
   }

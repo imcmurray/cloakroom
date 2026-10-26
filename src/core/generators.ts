@@ -165,7 +165,40 @@ export function generateRealistic(type: EntityType, original: string, seed = 0):
     }
     case 'PATH':
       return original.replace(/[^/\\.:]+/g, (seg) => (seg.length > 1 ? mimic(seg, rng) : seg));
+    case 'PRIVATE_KEY':
+      // Keep the BEGIN/END armor lines so the decoy still reads as a key block;
+      // mimic only the body between them.
+      return original.replace(
+        /^(-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----)([\s\S]*?)(-----END [A-Z0-9 ]*PRIVATE KEY-----)$/,
+        (_, head: string, body: string, foot: string) => head + mimic(body, rng) + foot,
+      );
     default:
       return mimic(original, rng);
+  }
+}
+
+/**
+ * A decoy for when a type's realistic pool has run dry. Several pools are small
+ * (18 hostnames, 10 orgs, 144 people, 762 RFC 5737 IPs), so ordinary inputs
+ * exhaust them. `n` is a per-type counter, so successive calls are always
+ * unique. Types whose decoys can carry a counter keep their recognizable shape
+ * (an example.* domain stays an example.* domain); types where a counter would
+ * make an invalid or real-looking value (IPs, phones, SSNs, cards…) become a
+ * «TYPE_n» token instead.
+ */
+export function widenDecoy(type: EntityType, base: string, n: number): string {
+  switch (type) {
+    case 'HOSTNAME':
+      return base.replace(/^((?:www\.)?[a-z]+)\./, `$1-${n}.`);
+    case 'EMAIL':
+      return base.replace('@', `${n}@`);
+    case 'URL':
+      return `${base}-${n}`;
+    case 'PERSON':
+    case 'ORG':
+    case 'CASE_NAME':
+      return `${base} ${n}`;
+    default:
+      return `«${type}_${n}»`;
   }
 }

@@ -20,7 +20,7 @@ const TYPE_COLORS: Record<string, string> = {
   EMAIL: '#6ea8fe', URL: '#6ea8fe', HOSTNAME: '#7cc0ff',
   PHONE: '#b794f6',
   SSN: '#e2725b', CREDIT_CARD: '#e8a33d',
-  API_KEY: '#c8a24a', AWS_KEY: '#c8a24a', JWT: '#c8a24a',
+  API_KEY: '#c8a24a', AWS_KEY: '#c8a24a', JWT: '#c8a24a', SECRET: '#c8a24a', PRIVATE_KEY: '#c8a24a',
   UUID: '#8b93a7', HASH: '#8b93a7',
   PATH: '#74c39a',
   PERSON: '#f178b6', ORG: '#d6a4ff',

@@ -91,7 +91,7 @@ masked audit shows what was caught without ever printing an original:
 ```yaml
 repos:
   - repo: https://github.com/imcmurray/cloakroom
-    rev: v0.3.0
+    rev: v0.4.0
     hooks:
       - id: cloak-scan
 ```
@@ -193,7 +193,7 @@ grep rule, mapping-is-the-secret): [`CONTRIBUTING.md`](CONTRIBUTING.md). Changes
 
 ## Status
 
-**v0.3.0** ([on npm](https://www.npmjs.com/package/@imcmurray/cloakroom) with SLSA
+**v0.4.0** ([on npm](https://www.npmjs.com/package/@imcmurray/cloakroom) with SLSA
 provenance). Shipped: browser app (PWA/offline, CSP-verified, attested builds) with
 review-and-refine, document tabs, encrypted session-restore, and term-pack import/export;
 the `cloak` CLI with `wrap`, encrypted bridge files, term packs, the pre-commit gate; and
