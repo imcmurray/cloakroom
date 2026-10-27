@@ -22,6 +22,12 @@
         "matcher": "Write|Edit",
         "hooks": [{ "type": "command", "command": "cloak hook restore", "timeout": 30 }]
       }
+    ],
+    "SessionEnd": [
+      {
+        "//": "Deletes the cached session key (<bridge>.key) when the session ends. The encrypted bridge stays, so a resumed session keeps its decoys.",
+        "hooks": [{ "type": "command", "command": "cloak hook end", "timeout": 30 }]
+      }
     ]
   }
 }

@@ -78,7 +78,8 @@ the file written to disk gets the real `10.9.9.9 / admin@bank.com`.
   "PostToolUse": [ { "matcher": "Read|Bash|Grep|mcp__.*",
     "hooks": [ { "type": "command", "command": "cloak hook sanitize" } ] } ],
   "PreToolUse":  [ { "matcher": "Write|Edit",
-    "hooks": [ { "type": "command", "command": "cloak hook restore" } ] } ] } }
+    "hooks": [ { "type": "command", "command": "cloak hook restore" } ] } ],
+  "SessionEnd":  [ { "hooks": [ { "type": "command", "command": "cloak hook end" } ] } ] } }
 ```
 
 Two things to know before turning this on:
@@ -93,8 +94,12 @@ Two things to know before turning this on:
   caches the raw derived key in `<bridge>.key` (mode 0600, git-ignored). Warm calls
   cost ~50ms instead of ~1.5s. Plainly stated trade-off: the keyfile decrypts the
   session bridge without the passphrase — near-zero marginal risk here since the same
-  user already holds `$CLOAK_PASS` in the environment, but delete `.cloak/` when the
-  session ends. Interactive CLI commands never create keyfiles; bridges you export and
+  user already holds `$CLOAK_PASS` in the environment. The transparent profile's
+  `SessionEnd` hook (`cloak hook end`) deletes the keyfile when the session ends and
+  keeps the encrypted bridge, so a resumed session keeps its decoys. If Claude Code
+  crashes, `SessionEnd` never runs: delete `$CLOAK_SESSION_BRIDGE.key` yourself (or
+  run `cloak hook end`), and delete `.cloak/` when you're done with the session's
+  mappings. Interactive CLI commands never create keyfiles; bridges you export and
   share stay passphrase-only.
 - The model is now reasoning over decoys. That's perfect for logs, config dumps, and
   diagnostics, and risky for editing **source** files — if Claude rewrites a decoy, the

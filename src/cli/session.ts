@@ -12,8 +12,9 @@
 // this adds ~zero marginal risk — the same user already has $CLOAK_PASS in the
 // process environment and can read the original files being sanitized. The
 // interactive CLI commands (sanitize/restore/inspect) never create keyfiles;
-// exported bridges you share remain passphrase-only. Delete the .key file (or
-// the whole .cloak/ dir) when the session ends.
+// exported bridges you share remain passphrase-only. `cloak hook end` (wired to
+// Claude Code's SessionEnd) deletes the keyfile when the session ends; the
+// bridge stays, so a resumed session derives the key once more.
 
 import { existsSync } from 'node:fs';
 import { readFile, unlink } from 'node:fs/promises';
@@ -80,6 +81,17 @@ export async function loadSessionMapping(
     await unlink(cachePathFor(bridgePath)).catch(() => {});
     sc = await deriveAndCache(bridgePath, pass);
     return { mapping: (await decryptBridgeWithKey(blob, sc.key)).mapping, crypto: sc };
+  }
+}
+
+/** Delete the session keyfile. Returns whether there was one to delete. */
+export async function dropSessionKey(bridgePath: string): Promise<boolean> {
+  try {
+    await unlink(cachePathFor(bridgePath));
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw e;
   }
 }
 

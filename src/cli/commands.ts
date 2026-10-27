@@ -12,7 +12,7 @@ import {
   type SanitizeOptions,
   type CustomTerm,
 } from '../core/index';
-import { loadSessionMapping, saveSessionMapping } from './session';
+import { dropSessionKey, loadSessionMapping, saveSessionMapping } from './session';
 import { loadPacks, packPaths, type PackOptions } from './packs';
 import { existsSync } from 'node:fs';
 import { Worker, parentPort } from 'node:worker_threads';
@@ -392,8 +392,14 @@ export function runHookWorker(job: HookJob): void {
 
 export async function cmdHook(args: ParsedArgs): Promise<number> {
   const mode = args.input;
+  if (mode === 'end') {
+    // SessionEnd sends an event too, but nothing in it matters here. Drain it
+    // (unless run by hand at a terminal) so Claude Code's write doesn't fail.
+    if (!process.stdin.isTTY) await readStdin().catch(() => '');
+    return hookEnd();
+  }
   if (!HOOK_MODES.includes(mode as HookMode)) {
-    err(`Unknown hook mode: ${String(mode)} (expected guard|sanitize|restore)`);
+    err(`Unknown hook mode: ${String(mode)} (expected guard|sanitize|restore|end)`);
     return 2;
   }
   let evt: HookEvent;
@@ -420,6 +426,24 @@ export async function cmdHook(args: ParsedArgs): Promise<number> {
   }
   if (response) emit(response);
   return 0;
+}
+
+/**
+ * End of session (SessionEnd): delete the cached session key, so the raw key
+ * that decrypts the session bridge doesn't outlive the session. The bridge
+ * itself stays (still passphrase-encrypted). SessionEnd can't block anything,
+ * so a failure is only reported, with exit 1.
+ */
+export async function hookEnd(): Promise<number> {
+  const path = process.env.CLOAK_SESSION_BRIDGE;
+  if (!path) return 0;
+  try {
+    await dropSessionKey(path);
+    return 0;
+  } catch (e) {
+    err(`cloak hook end: could not delete ${path}.key: ${e instanceof Error ? e.message : String(e)}`);
+    return 1;
+  }
 }
 
 const NO_PACKS: PackOptions = { customTerms: [], whitelist: [] };

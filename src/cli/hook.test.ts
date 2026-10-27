@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFile, rm, mkdtemp, mkdir } from 'node:fs/promises';
-import { hookGuard, hookSanitize, hookRestore } from './commands';
+import { hookGuard, hookSanitize, hookRestore, hookEnd } from './commands';
 
 // Payload shapes below mirror what Claude Code actually sends (verified against
 // the installed binary): PostToolUse carries `tool_response`, and the response
@@ -211,5 +211,30 @@ describe('session key cache', () => {
     const out = (resp as any).hookSpecificOutput.updatedToolOutput.stdout as string;
     expect(out).not.toContain('10.9.9.9');
     expect(out).not.toContain('withheld'); // recovered, not failed-closed
+  });
+});
+
+describe('hook end (SessionEnd)', () => {
+  it('deletes the session keyfile and keeps the bridge, which still unlocks with the passphrase', async () => {
+    const { stat } = await import('node:fs/promises');
+    const { existsSync } = await import('node:fs');
+    const san = await hookSanitize({ tool_name: 'Bash', tool_response: { stdout: SECRET, stderr: '' } });
+    const decoyed = (san as any).hookSpecificOutput.updatedToolOutput.stdout as string;
+    const keyPath = process.env.CLOAK_SESSION_BRIDGE + '.key';
+    await stat(keyPath);
+
+    expect(await hookEnd()).toBe(0);
+    expect(existsSync(keyPath)).toBe(false);
+    expect(existsSync(process.env.CLOAK_SESSION_BRIDGE!)).toBe(true);
+
+    // A resumed session re-derives from the passphrase and restores as before.
+    const res = await hookRestore({ tool_name: 'Write', tool_input: { file_path: '/tmp/x', content: decoyed } });
+    expect((res as any).hookSpecificOutput.updatedInput.content).toBe(SECRET);
+  });
+
+  it('is a no-op without a keyfile or without the session env', async () => {
+    expect(await hookEnd()).toBe(0);
+    delete process.env.CLOAK_SESSION_BRIDGE;
+    expect(await hookEnd()).toBe(0);
   });
 });
