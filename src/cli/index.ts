@@ -10,7 +10,7 @@ import { isMainThread, workerData } from 'node:worker_threads';
 import { cmdHook, cmdInspect, cmdRestore, cmdSanitize, cmdScan, runHookWorker } from './commands';
 import { cmdWrap } from './wrap';
 
-const VERSION = '0.4.2';
+const VERSION = '0.4.3';
 
 const HELP = `cloak — check your secrets at the door, get them back on the way out.
 
@@ -27,6 +27,7 @@ COMMANDS
   inspect    Show the masked audit of an existing bridge file.
   hook       Claude Code hook adapter (guard|sanitize|restore); reads a hook
              event as JSON on stdin, writes a hook response on stdout.
+             'hook end' (SessionEnd) deletes the session keyfile.
              --deadline <s> (default 20): past it, fail closed (withhold or
              deny). Keep it below the hook's Claude Code timeout.
   help       Show this help. (--version prints the version.)

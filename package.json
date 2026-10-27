@@ -1,6 +1,6 @@
 {
   "name": "@imcmurray/cloakroom",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Check your secrets at the door: swap PII/secrets for reserved-range decoys before any LLM sees them, restore them in the reply. CLI (`cloak`), wrap-any-command mode, pre-commit gate, Claude Code hooks.",
   "keywords": [
     "privacy",
@@ -46,16 +46,14 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
   "devDependencies": {
     "@types/node": "^22.20.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "esbuild": "^0.21.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^5.5.4",
     "vite": "^5.4.2",
     "vite-plugin-pwa": "^0.20.5",

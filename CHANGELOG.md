@@ -6,7 +6,16 @@ versions may include breaking changes.
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-10-26
+
 ### Security
+- **The session keyfile is deleted when the session ends.** The transparent
+  profile now runs `cloak hook end` on Claude Code's `SessionEnd`, which
+  deletes `<bridge>.key` (the raw key that decrypts the session bridge) and
+  keeps the encrypted bridge, so a resumed session keeps its decoys. If Claude
+  Code crashes, `SessionEnd` doesn't run; delete the keyfile by hand (or run
+  `cloak hook end`). Re-copy `integrations/claude-code/settings.transparent.json`
+  to pick this up.
 - **GitHub Actions are pinned to commit SHAs** in all workflows, with the
   release tag kept as a trailing comment. A moved or compromised tag can no
   longer change what runs in the release job, which publishes to npm.
@@ -24,6 +33,9 @@ versions may include breaking changes.
 - **The release workflow also creates the GitHub release**, from the version's
   CHANGELOG section, once npm has the package. It runs in its own job with only
   `contents: write`, apart from the job that holds the npm publish identity.
+- **`react` and `react-dom` are dev dependencies now.** Only the browser app
+  uses them, and it ships to GitHub Pages, not npm. Installing the CLI went from
+  6 packages to 1.
 
 ## [0.4.2] — 2026-10-26
 
