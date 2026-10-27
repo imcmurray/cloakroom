@@ -5,6 +5,7 @@
 // files); the vocabulary is yours and applies to whichever tab you sanitize.
 
 import { useEffect, useRef, useState } from 'react';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { encryptBridge, decryptBridge } from '../core/crypto';
 import { mergePack, parseTermPack, serializeTermPack } from '../core/packs';
 import { Workspace, parseTerms } from './Workspace';
@@ -45,6 +46,12 @@ export function App() {
 
   const [egress, setEgress] = useState<'idle' | 'testing' | 'blocked' | 'allowed'>('idle');
   const [flash, setFlash] = useState<string | null>(null);
+  // Precache the app shell (installable, works fully offline). Updates wait for
+  // the user: see the update banner.
+  const {
+    needRefresh: [updateReady, setUpdateReady],
+    updateServiceWorker,
+  } = useRegisterSW({ immediate: true });
 
   // Encrypted session-restore (opt-in): key lives ONLY in memory; blob in
   // localStorage is AES-256-GCM; peek deletes expired sessions on sight.
@@ -352,6 +359,18 @@ export function App() {
         </aside>
 
         <div className="deck">
+          {updateReady && (
+            <div className="banner" role="status">
+              <div>
+                <strong>A new version of Cloakroom is available.</strong> It replaces the code that handles
+                your data, so it only installs when you say so. You can check it against the{' '}
+                <a href="https://github.com/imcmurray/cloakroom/attestations" target="_blank" rel="noopener noreferrer">build attestations</a>{' '}
+                first. If you don't, your browser installs it once every Cloakroom window is closed.
+              </div>
+              <button className="ghost" onClick={() => updateServiceWorker(true)}>Update now</button>
+              <button className="ghost dismiss" title="Keep this version for now" onClick={() => setUpdateReady(false)}>Later</button>
+            </div>
+          )}
           {stored.state === 'present' && !sessionKp && (
             <div className="banner" role="status">
               <span className="brasstag sm">{stored.tabCount}</span>
@@ -425,7 +444,10 @@ export function App() {
             <p className="hint">
               It also works fully offline (install it, then turn off Wi-Fi), and every deployed build is{' '}
               <a href="https://github.com/imcmurray/cloakroom/attestations" target="_blank" rel="noopener noreferrer">provenance-signed</a>{' '}
-              — verify with <code>gh attestation verify</code>.
+              — verify with <code>gh attestation verify</code>. This is build{' '}
+              <a href={`https://github.com/imcmurray/cloakroom/commit/${__BUILD_ID__}`} target="_blank" rel="noopener noreferrer">
+                <code>{__BUILD_ID__.slice(0, 7)}</code>
+              </a>.
             </p>
           </div>
         </details>

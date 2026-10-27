@@ -1,6 +1,18 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'node:child_process';
+
+// The commit this bundle was built from, shown in the footer so a user can match
+// the running app against its build-provenance attestation.
+function buildId(): string {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA;
+  try {
+    return execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return 'dev';
+  }
+}
 
 // CSP differs by mode: dev needs ws/wss for HMR; production locks network egress
 // to 'none', so the browser itself blocks every fetch/XHR/WebSocket/beacon.
@@ -19,11 +31,15 @@ function cspByMode(isBuild: boolean): Plugin {
 // it at /cloakroom/). Dev server stays at root.
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? './' : '/',
+  define: { __BUILD_ID__: JSON.stringify(buildId()) },
   plugins: [
     react(),
     cspByMode(command === 'build'),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt', not 'autoUpdate': a new deploy replaces the code that handles
+      // your data, so it waits for the user to accept it (App's update banner)
+      // instead of swapping itself in, and reloading, behind their back.
+      registerType: 'prompt',
       includeAssets: ['icon.svg', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png'],
       // Precache the whole app shell so it loads with no network at all.
       workbox: { globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'] },

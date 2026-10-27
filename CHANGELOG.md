@@ -11,6 +11,14 @@ versions may include breaking changes.
   release tag kept as a trailing comment. A moved or compromised tag can no
   longer change what runs in the release job, which publishes to npm.
   Dependabot (`.github/dependabot.yml`) proposes weekly grouped bumps.
+- **The web app no longer updates itself silently.** It used
+  `registerType: 'autoUpdate'`, so a new (or compromised) Pages deploy took over
+  installed copies at once and reloaded the page, dropping any unsaved session.
+  Now the running version keeps going and shows a banner. The update installs
+  when you click *Update now*, or when the browser applies it after every
+  Cloakroom window is closed. The footer shows the commit the running app was
+  built from, to check against the build attestations. The README and threat
+  model no longer present the offline app as a version pin.
 
 ## [0.4.2] — 2026-10-26
 

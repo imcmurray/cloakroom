@@ -158,7 +158,9 @@ Privacy claims should be checkable, not trusted. In rough order of how convincin
    ```bash
    gh attestation verify <downloaded-asset.js> --repo imcmurray/cloakroom
    ```
-6. **Maximum assurance.** A hosted page still asks you to trust the host to serve the real JS on first load — physics, not a bug, for any web app. Self-host the static build, run it offline, or use a pinned browser extension to remove that last sliver of trust.
+   The footer's *verify it* panel names the commit the running app was built from.
+6. **Updates ask first.** When a new version is deployed, the installed app keeps running the version you have and shows a banner; it switches only when you click *Update now*. One limit belongs to every web app: the browser installs a waiting update by itself once every Cloakroom window is closed, so an installed copy is not pinned to a version.
+7. **Maximum assurance.** A hosted page still asks you to trust the host to serve the real JS, on the first load and on every update — physics, not a bug, for any web app. Self-host the static build or use a pinned browser extension to remove that last sliver of trust.
 
 Even the animated demos above are generated from committed source
 ([`scripts/gen-cli-demo.mjs`](scripts/gen-cli-demo.mjs)) rather than shipped as opaque

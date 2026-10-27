@@ -21,7 +21,7 @@
 
 ## Primary threats & mitigations
 
-1. **Malicious/compromised server swaps in exfiltrating JS.** This is the hardest threat for any "client-side" web tool. Mitigations: ship as a self-hostable static bundle; publish a **Subresource Integrity** manifest and reproducible builds; offer the **PWA/offline** mode and **browser extension** (extensions are reviewed and version-pinned, dramatically shrinking this surface); strict CSP with `connect-src 'none'` (or `'self'` only) so injected code can't phone home. Document that maximum assurance = self-host or extension.
+1. **Malicious/compromised server swaps in exfiltrating JS.** This is the hardest threat for any "client-side" web tool. Mitigations: ship as a self-hostable static bundle; publish a **Subresource Integrity** manifest and reproducible builds; offer the **PWA/offline** mode (updates wait for the user's *Update now*, so a new deploy never swaps itself into a running app; it is not a version pin, since the browser installs a waiting update once every app window is closed) and **browser extension** (extensions are reviewed and version-pinned, dramatically shrinking this surface); strict CSP with `connect-src 'none'` (or `'self'` only) so injected code can't phone home. Document that maximum assurance = self-host or extension.
 2. **Mapping leakage at rest.** Mapping is in-memory by default; persistence is opt-in and always encrypted (bridge files, and the browser's session-restore — passphrase-derived key held only in memory, 7-day auto-expiry, one-click panic clear, shipped).
 3. **Wrong/partial sanitization (false negatives).** A missed secret is the worst failure. Mitigations: conservative high-recall detectors, an always-visible **audit panel** showing exactly what was replaced (masked), a manual select-to-redact tool, and a pre-copy "looks-unsanitized?" scan that warns on residual high-entropy strings.
 4. **Reversal ambiguity / cascade substitution.** Solved structurally by single-pass longest-first alternation reversal (see `engine.ts`), unique-decoy enforcement, and consistent per-value mapping.
@@ -38,7 +38,7 @@
 
 ## Honest limitations
 
-- A determined hostile host serving JS can defeat any pure-web client-side tool on the *first* load; that's physics, not a bug. Self-host / extension / offline PWA are the real-assurance paths and must be promoted as such.
+- A determined hostile host serving JS can defeat any pure-web client-side tool on the *first* load, and an installed PWA picks up whatever the host serves once its windows are closed and it's back online; that's physics, not a bug. Self-host / extension are the real-assurance paths and must be promoted as such. (The PWA used to update itself silently, `registerType: 'autoUpdate'`; it now asks.)
 - Free-text **names/orgs** detection is inherently imperfect; user-declared terms and opt-in NER are the reliable levers, and the audit panel keeps the human in the loop.
 - This tool reduces leakage; it is **not** a guarantee that sanitized text is safe to share. Say so plainly in the UI.
 
