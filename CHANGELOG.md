@@ -20,6 +20,11 @@ versions may include breaking changes.
   built from, to check against the build attestations. The README and threat
   model no longer present the offline app as a version pin.
 
+### Changed
+- **The release workflow also creates the GitHub release**, from the version's
+  CHANGELOG section, once npm has the package. It runs in its own job with only
+  `contents: write`, apart from the job that holds the npm publish identity.
+
 ## [0.4.2] — 2026-10-26
 
 ### Security

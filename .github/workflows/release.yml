@@ -15,6 +15,9 @@ name: Release to npm
 # admins (tag ruleset). No npm cache here: a publishing job builds from a
 # clean download, and there is no registry-url, so npm can't fall back to a
 # placeholder token and hide an OIDC failure behind a misleading E404.
+#
+# After a successful publish, the github-release job creates the GitHub
+# release from the version's CHANGELOG.md section (it fails if there is none).
 
 on:
   push:
@@ -54,3 +57,46 @@ jobs:
           PKG="v$(node -p "require('./package.json').version")"
           [ "$PKG" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != package.json $PKG"; exit 1; }
       - run: npm publish --provenance --access public
+
+  # The GitHub release, made after npm has the version. A separate job so the
+  # write permission it needs never sits beside the publish credentials; it
+  # can't reach npm (no id-token) and the publish job can't write the repo.
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Notes from CHANGELOG.md
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="$VERSION" 'index($0, "## [" v "]") == 1 { f = 1; next } /^## \[/ { f = 0 } f' CHANGELOG.md \
+            | sed -E 's#(GHSA(-[0-9a-z]{4}){3})#[\1](https://github.com/'"$GITHUB_REPOSITORY"'/security/advisories/\1)#g' \
+            | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > notes.md
+          [ -s notes.md ] || { echo "CHANGELOG.md has no section for $VERSION"; exit 1; }
+          cat >> notes.md <<NOTES
+
+          ### Install
+          \`\`\`bash
+          npm install -g @imcmurray/cloakroom@$VERSION
+          \`\`\`
+          Published to [npm](https://www.npmjs.com/package/@imcmurray/cloakroom/v/$VERSION) from this tag by the release workflow, with signed provenance (\`npm audit signatures\` verifies it). Full history: [CHANGELOG.md](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/CHANGELOG.md).
+          NOTES
+          cat notes.md
+      # Release commits are titled "vX.Y.Z: summary"; use that as the title.
+      # A rerun updates the existing release instead of failing.
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TITLE="$(git log -1 --format=%s)"
+          case "$TITLE" in "$GITHUB_REF_NAME"*) ;; *) TITLE="$GITHUB_REF_NAME" ;; esac
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "$TITLE" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "$TITLE" --notes-file notes.md
+          fi
